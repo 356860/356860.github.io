@@ -1,0 +1,1825 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>立定跳远课堂分析 - 阶段状态机优化版</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <style>
+        :root {
+            --bg: #f4f7fb;
+            --card: #ffffff;
+            --line: #d8e2f0;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --primary: #246bff;
+            --success: #1f9d55;
+            --danger: #e85d5d;
+        }
+
+        * { box-sizing: border-box; touch-action: manipulation; }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg);
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            color: var(--text);
+        }
+
+        body { overflow: hidden; }
+
+        .app {
+            display: grid;
+            grid-template-columns: 1.7fr 1fr;
+            width: 100vw;
+            height: 100vh;
+            gap: 12px;
+            padding: 12px;
+        }
+
+        .stage {
+            position: relative;
+            border-radius: 20px;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top, rgba(255, 255, 255, 0.08), transparent 34%),
+                linear-gradient(180deg, #0c172b 0%, #162745 100%);
+            border: 1px solid rgba(216, 226, 240, 0.5);
+            min-height: 0;
+        }
+
+        #video-layer,
+        #draw-layer {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        #video-layer {
+            transform: scaleX(-1);
+            opacity: 0.9;
+            filter: contrast(1.04) saturate(0.96) brightness(0.92);
+        }
+
+        .top-bar,
+        .bottom-bar {
+            position: absolute;
+            z-index: 10;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .top-bar {
+            top: 12px;
+            left: 50%;
+            transform: translateX(-50%);
+            justify-content: center;
+        }
+        .bottom-bar { left: 12px; right: 12px; bottom: 12px; justify-content: center; flex-wrap: wrap; }
+
+        .chip,
+        .toolbar,
+        .panel {
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid rgba(216, 226, 240, 0.95);
+            border-radius: 14px;
+            box-shadow: 0 10px 26px rgba(36, 107, 255, 0.08);
+        }
+
+        .chip {
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .title-chip {
+            padding: 10px 20px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.24);
+            border-radius: 999px;
+            color: #ffffff;
+            font-size: 20px;
+            font-weight: 800;
+            backdrop-filter: blur(8px);
+            box-shadow: none;
+            letter-spacing: 1px;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 8px;
+        }
+
+        .student-dock {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 11;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .student-toggle {
+            border: 1px solid rgba(216, 226, 240, 0.95);
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            border-radius: 999px;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            box-shadow: none;
+        }
+
+        .student-panel {
+            position: absolute;
+            top: calc(100% + 10px);
+            left: 0;
+            min-width: 330px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-6px);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            background: rgba(255, 255, 255, 0.94);
+        }
+
+        .student-panel.is-open {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        .sound-dock {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            z-index: 11;
+            display: inline-flex;
+            align-items: flex-end;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .sound-toggle {
+            border: 1px solid rgba(216, 226, 240, 0.95);
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            border-radius: 999px;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            box-shadow: none;
+        }
+
+        .sound-panel {
+            width: 250px;
+            padding: 12px;
+            display: grid;
+            gap: 10px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-6px);
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            background: rgba(255, 255, 255, 0.94);
+        }
+
+        .sound-panel.is-open {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        .sound-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+        }
+
+        .sound-row label {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .sound-row input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+        }
+
+        .sound-volume {
+            display: grid;
+            gap: 6px;
+        }
+
+        .sound-volume input[type="range"] {
+            width: 100%;
+        }
+
+        .toolbar select,
+        .toolbar button,
+        .panel button {
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--text);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .toolbar select { min-width: 120px; }
+        .toolbar button.primary { background: var(--primary); color: #fff; border-color: transparent; }
+        .toolbar button.danger { background: var(--danger); color: #fff; border-color: transparent; }
+
+        .sidebar {
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        .panel { padding: 16px; }
+        .panel h2, .panel h3 { margin: 0 0 10px; }
+        .panel h2 { font-size: 18px; }
+        .panel h3 { font-size: 16px; }
+
+        .muted { color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 12px;
+        }
+
+        .metric {
+            background: #f8fbff;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 12px;
+        }
+
+        .metric-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+        .metric-value { font-size: 28px; font-weight: 800; }
+
+        .phase-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 12px;
+            border-radius: 999px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            background: var(--primary);
+        }
+
+        .feedback-box {
+            background: #f8fbff;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
+            margin-top: 12px;
+        }
+
+        .mode-panel {
+            display: grid;
+            gap: 10px;
+        }
+
+        .mode-panel select {
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--text);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .drill-list {
+            display: grid;
+            gap: 8px;
+        }
+
+        .drill-item {
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 10px 12px;
+            background: #f8fbff;
+        }
+
+        .drill-item strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+
+        .drill-item span {
+            display: block;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.5;
+        }
+
+        .feedback-title { font-size: 19px; font-weight: 800; margin-bottom: 6px; }
+        .feedback-sub { font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+        .summary { display: grid; gap: 10px; }
+
+        .summary-card,
+        .history-item {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: #f8fbff;
+        }
+
+        .summary-card strong { display: block; margin-bottom: 6px; font-size: 14px; }
+        .summary-card p { margin: 0; font-size: 14px; line-height: 1.6; }
+
+        .history {
+            min-height: 0;
+            overflow: auto;
+            display: grid;
+            gap: 8px;
+        }
+
+        .history-item .time { color: var(--muted); font-size: 12px; margin-bottom: 6px; }
+        .history-item .result { font-size: 14px; line-height: 1.5; }
+        .ok { color: var(--success); }
+        .bad { color: var(--danger); }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 12;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 24px;
+            background: rgba(244, 247, 251, 0.92);
+        }
+
+        .overlay-box {
+            max-width: 420px;
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 14px 38px rgba(31, 41, 55, 0.12);
+        }
+
+        .overlay-title {
+            font-size: 30px;
+            font-weight: 900;
+            color: var(--danger);
+            margin-bottom: 10px;
+        }
+
+        .overlay-text { color: var(--muted); line-height: 1.7; }
+
+        @media (max-width: 960px) {
+            body { overflow: auto; }
+            .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
+            .stage { min-height: 54vh; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <section class="stage">
+            <video id="video-layer" playsinline></video>
+            <canvas id="draw-layer"></canvas>
+
+            <div class="top-bar">
+                <div class="title-chip">立定跳远课堂版</div>
+            </div>
+
+            <div class="student-dock">
+                <button id="student-toggle" class="student-toggle" onclick="toggleStudentPanel()">默认学生</button>
+                <div id="student-panel" class="toolbar student-panel">
+                    <select id="student-select" onchange="changeStudent()"></select>
+                    <button onclick="addStudent()">新增</button>
+                    <button onclick="deleteStudent()">删除</button>
+                </div>
+            </div>
+
+            <div class="sound-dock">
+                <button id="sound-toggle" class="sound-toggle" onclick="toggleSoundPanel()">声音提示</button>
+                <div id="sound-panel" class="panel sound-panel">
+                    <div class="sound-row">
+                        <label for="sound-effects-toggle">音效</label>
+                        <input id="sound-effects-toggle" type="checkbox" onchange="updateAudioPrefs()">
+                    </div>
+                    <div class="sound-row">
+                        <label for="voice-guidance-toggle">语音提醒</label>
+                        <input id="voice-guidance-toggle" type="checkbox" onchange="updateAudioPrefs()">
+                    </div>
+                    <div class="sound-row">
+                        <label for="voice-praise-toggle">鼓励语音</label>
+                        <input id="voice-praise-toggle" type="checkbox" onchange="updateAudioPrefs()">
+                    </div>
+                    <div class="sound-volume">
+                        <label for="audio-volume-range">音量</label>
+                        <input id="audio-volume-range" type="range" min="0" max="100" step="5" onchange="updateAudioPrefs()">
+                    </div>
+                </div>
+            </div>
+
+            <div class="bottom-bar">
+                <div class="toolbar">
+                    <button id="start-btn" class="primary" onclick="toggleTraining()">开始分析</button>
+                    <button onclick="finishRound()">结束本轮</button>
+                    <button onclick="clearCurrentStudentHistory()">清空记录</button>
+                </div>
+            </div>
+
+            <div class="overlay" id="overlay">
+                <div class="overlay-box">
+                    <div class="overlay-title">准备中</div>
+                    <div class="overlay-text" id="overlay-text">正在打开摄像头并加载姿态识别，请保持网络稳定并允许摄像头权限。</div>
+                </div>
+            </div>
+        </section>
+
+        <aside class="sidebar">
+            <section class="panel">
+                <h3>训练项目</h3>
+                <div class="mode-panel">
+                    <select id="mode-select" onchange="changeMode()">
+                        <option value="full">完整立定跳远</option>
+                        <option value="arms">摆臂专项</option>
+                        <option value="preload">预摆蹬伸专项</option>
+                        <option value="landing">落地缓冲专项</option>
+                    </select>
+                    <div class="drill-list" id="drill-list"></div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h2>实时反馈</h2>
+                <div class="phase-badge" id="phase-badge">阶段：待机</div>
+                <div class="feedback-box">
+                    <div class="feedback-title" id="feedback-main">请侧身站立，保证全身入镜</div>
+                    <div class="feedback-sub" id="feedback-sub">建议从侧面拍摄，双脚和双手都要完整入镜，先站稳再开始动作。</div>
+                </div>
+                <div class="status-grid">
+                    <div class="metric">
+                        <div class="metric-label">练习次数</div>
+                        <div class="metric-value ok" id="practice-count">0</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel">
+                <h3>本轮结果</h3>
+                <div class="summary" id="round-summary">
+                    <div class="summary-card">
+                        <strong>动作结果</strong>
+                        <p>开始分析后，系统会按照“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作，并给出针对性指导。</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel" style="min-height: 0; display: flex; flex-direction: column;">
+                <h3>学生历史</h3>
+                <p class="muted">每次结束本轮后，会保存当前学生的练习次数、主要问题和下一轮建议。</p>
+                <div class="history" id="history-list"></div>
+            </section>
+        </aside>
+    </div>
+
+    <script>
+        const STORAGE_KEY = 'jump-gemini-phase-studio-v1';
+        const AUDIO_PREFS_KEY = 'jump-gemini-audio-prefs-v1';
+        const REQUIRED_POINTS = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+        const CONNECTORS = [
+            [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
+            [11, 23], [12, 24], [23, 24], [23, 25], [24, 26],
+            [25, 27], [26, 28], [27, 31], [28, 32]
+        ];
+
+        const STANDARD_JUMP_PROFILE = {
+            source: '跳远.mp4',
+            validFrames: 23,
+            phases: {
+                ready: { kneeAngle: [174.861, 180.498], hipAngle: [175.31, 180.273], holdFrames: 6 },
+                preload: { kneeAngle: [170.14, 178.309], hipDrop: [0.028, 0.092], wristBack: [2.532, 19.254] },
+                takeoff: { kneeAngle: [165.534, 169.534], armLiftDelta: [-0.817, -0.797], hipRise: [-0.003, 0.003] },
+                flight: { hipForwardDelta: [0.007, 0.013], trunkLean: [5.547, 9.547] },
+                landing: { kneeAngle: [165.534, 169.534], heelLead: [-0.013, -0.009] }
+            }
+        };
+
+        const JUMP_CONFIG = {
+            minVisibility: 0.45,
+            emaAlpha: 0.3,
+            readyHoldFrames: 6,
+            readyKneeMin: 148,
+            readyHipMin: 140,
+            preloadKneeMax: 164,
+            preloadHipMax: 160,
+            preloadMinFrames: 3,
+            takeoffConfirmFrames: 2,
+            flightConfirmFrames: 2,
+            landingConfirmFrames: 2,
+            preloadTimeoutMs: 1400,
+            minPreloadDepth: 0.024,
+            takeoffKneeMin: 138,
+            takeoffRise: 0.009,
+            minArmSwingRise: 0.03,
+            minFlightForward: 0.012,
+            takeoffTimeoutMs: 750,
+            flightTimeoutMs: 950,
+            landingKneeMax: 150,
+            landingTimeoutMs: 900,
+            roundCooldownFrames: 18,
+            stableMotionThreshold: 0.02,
+            heelLeadMin: -0.09,
+            targetTrackRatio: 1.35,
+            targetTorsoMinRatio: 0.72,
+            targetTorsoMaxRatio: 1.38,
+            targetGraceFrames: 4,
+            maxLowerBodyLossFrames: 3,
+            doubleTakeoffSyncRatio: 0.025
+        };
+
+        const ISSUE_META = {
+            not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站立 1 秒，再做完整预摆和起跳。' },
+            preload_weak: { label: '预摆不足', tip: '预摆再深一点，膝和髋要一起下沉。', advice: '下一轮先做 3 次慢预摆，再做完整动作。' },
+            takeoff_weak: { label: '蹬伸不充分', tip: '起跳时髋膝要更快伸展。', advice: '蹬地时注意伸髋伸膝，向前上方发力。' },
+            arm_weak: { label: '摆臂不积极', tip: '双臂从后向前上方快速摆起。', advice: '练习大臂后摆到前上摆，带动起跳节奏。' },
+            flight_short: { label: '腾空前送不足', tip: '蹬地后继续向前送髋。', advice: '下次蹬地更完整，让身体前移更明显。' },
+            landing_stiff: { label: '落地缓冲不足', tip: '落地时主动屈膝缓冲。', advice: '脚跟落地后及时屈膝收髋，减小冲击。' },
+            heel_late: { label: '落地脚跟不明显', tip: '脚跟先接触，再过渡到全脚掌。', advice: '多做小跳缓冲练习，体会脚跟先着地。' },
+            keypoint_lost: { label: '入镜不完整', tip: '请保持全身完整入镜。', advice: '调整站位，保证双脚和双手都能被看到。' },
+            target_size_drift: { label: '识别目标跑偏', tip: '请保持与镜头的距离稳定，避免背景人物遮挡。', advice: '系统会自动锁定练习者，如果位置和人体大小突然变化，会暂时忽略异常帧。' },
+            double_takeoff_async: { label: '双脚起跳不同步', tip: '注意双脚同时起跳哦。', advice: '先做预摆蹬伸专项，体会两脚一起蹬地发力。' }
+        };
+
+        const DRILL_CONTENT = {
+            full: [
+                { title: '完整立定跳远', text: `参考标准视频 ${STANDARD_JUMP_PROFILE.source}，动作按“站稳→预摆→蹬伸起跳→腾空→落地缓冲”依次完成。` },
+                { title: '角度要点', text: '预摆阶段重点看膝髋一起下沉；蹬地时膝和髋要快速打开；落地时脚跟先着地并主动屈膝。' }
+            ],
+            arms: [
+                { title: '摆臂专项', text: '重点练大臂后摆到前上摆。不要只甩小臂，要让肩关节带动手臂完整摆动。' },
+                { title: '推荐练习', text: '原地摆臂 2 组，每组 8 次；再做 5 次摆臂带预摆，感受手臂带动身体向前上方。' }
+            ],
+            preload: [
+                { title: '预摆蹬伸专项', text: '重点练膝髋共同下沉和快速蹬伸，不要只弯腰或只蹲不蹬。' },
+                { title: '推荐练习', text: '先做 5 次慢预摆，再做 5 次预摆后快速蹬伸，重点体会下蹲和起跳衔接。' }
+            ],
+            landing: [
+                { title: '落地缓冲专项', text: '重点练脚跟先着地、全脚掌过渡和屈膝缓冲，落地后保持身体稳定。' },
+                { title: '推荐练习', text: '小跳落地缓冲 2 组，每组 6 次；落地时注意脚跟先接触，再过渡到全脚掌。' }
+            ]
+        };
+
+        const app = {
+            ready: false,
+            training: false,
+            students: loadStudents(),
+            currentStudent: '',
+            round: null,
+            phase: 'IDLE',
+            phaseFrames: 0,
+            phaseStartedAt: 0,
+            attemptStartedAt: 0,
+            readyFrames: 0,
+            cooldownFrames: 0,
+            stableFrames: 0,
+            prevHipX: null,
+            prevHipY: null,
+            baseline: null,
+            attempt: null,
+            targetLock: null,
+            targetGraceFrames: 0,
+            lowerBodyLossFrames: 0,
+            smoothFeatures: null,
+            confirmFrames: { takeoff: 0, flight: 0, landing: 0 },
+            drillPhase: 'IDLE',
+            drillFrames: 0
+        };
+
+        const video = document.getElementById('video-layer');
+        const canvas = document.getElementById('draw-layer');
+        const ctx = canvas.getContext('2d');
+        const overlay = document.getElementById('overlay');
+        const overlayText = document.getElementById('overlay-text');
+        const phaseBadge = document.getElementById('phase-badge');
+        const feedbackMain = document.getElementById('feedback-main');
+        const feedbackSub = document.getElementById('feedback-sub');
+        const practiceCountEl = document.getElementById('practice-count');
+        const roundSummary = document.getElementById('round-summary');
+        const historyList = document.getElementById('history-list');
+        const studentSelect = document.getElementById('student-select');
+        const startBtn = document.getElementById('start-btn');
+        const modeSelect = document.getElementById('mode-select');
+        const drillList = document.getElementById('drill-list');
+        const studentPanel = document.getElementById('student-panel');
+        const studentToggle = document.getElementById('student-toggle');
+        const soundPanel = document.getElementById('sound-panel');
+        const soundToggle = document.getElementById('sound-toggle');
+        const soundEffectsToggle = document.getElementById('sound-effects-toggle');
+        const voiceGuidanceToggle = document.getElementById('voice-guidance-toggle');
+        const voicePraiseToggle = document.getElementById('voice-praise-toggle');
+        const audioVolumeRange = document.getElementById('audio-volume-range');
+        const titleChip = document.querySelector('.title-chip');
+        const studentDock = document.querySelector('.student-dock');
+        const audioState = {
+            prefs: loadAudioPrefs(),
+            ctx: null,
+            lastGuidanceText: '',
+            lastGuidanceAt: 0,
+            lastPraiseAt: 0
+        };
+        const PRAISE_LINES = [
+            '这次节奏很好，继续保持。',
+            '动作越来越连贯了。',
+            '很好，继续做下一次。',
+            '这次完成得不错，再来一组。'
+        ];
+
+        function normalizePracticeUi() {
+            if (titleChip) titleChip.textContent = '立定跳远课堂版';
+            if (studentDock) {
+                const legacyChip = studentDock.querySelector('.chip');
+                if (legacyChip) legacyChip.remove();
+            }
+            const historyHint = document.querySelector('.panel .muted');
+            if (historyHint) historyHint.textContent = '每次结束本轮后，会保存当前学生的练习次数、主要问题和下一轮建议。';
+        }
+
+        function loadAudioPrefs() {
+            try {
+                const raw = localStorage.getItem(AUDIO_PREFS_KEY);
+                if (!raw) return { effects: true, guidance: true, praise: true, volume: 0.8 };
+                const parsed = JSON.parse(raw);
+                return {
+                    effects: parsed.effects !== false,
+                    guidance: parsed.guidance !== false,
+                    praise: parsed.praise !== false,
+                    volume: typeof parsed.volume === 'number' ? Math.min(1, Math.max(0, parsed.volume)) : 0.8
+                };
+            } catch (error) {
+                return { effects: true, guidance: true, praise: true, volume: 0.8 };
+            }
+        }
+
+        function saveAudioPrefs() {
+            localStorage.setItem(AUDIO_PREFS_KEY, JSON.stringify(audioState.prefs));
+        }
+
+        function applyAudioPrefsToUi() {
+            soundEffectsToggle.checked = audioState.prefs.effects;
+            voiceGuidanceToggle.checked = audioState.prefs.guidance;
+            voicePraiseToggle.checked = audioState.prefs.praise;
+            audioVolumeRange.value = Math.round(audioState.prefs.volume * 100);
+        }
+
+        function ensureAudioContext() {
+            if (audioState.ctx) return audioState.ctx;
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!AudioCtx) return null;
+            audioState.ctx = new AudioCtx();
+            return audioState.ctx;
+        }
+
+        function unlockAudio() {
+            const ctx = ensureAudioContext();
+            if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {});
+        }
+
+        function playTone(type) {
+            if (!audioState.prefs.effects) return;
+            const ctx = ensureAudioContext();
+            if (!ctx) return;
+            if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+            const configs = {
+                start: { frequency: 660, duration: 0.12, gain: 0.05, wave: 'triangle' },
+                success: { frequency: 880, duration: 0.12, gain: 0.06, wave: 'sine' },
+                finish: { frequency: 520, duration: 0.18, gain: 0.05, wave: 'triangle' },
+                warning: { frequency: 300, duration: 0.16, gain: 0.05, wave: 'square' }
+            };
+            const config = configs[type] || configs.success;
+            const oscillator = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            const now = ctx.currentTime;
+            oscillator.type = config.wave;
+            oscillator.frequency.value = config.frequency;
+            gainNode.gain.setValueAtTime(config.gain * audioState.prefs.volume, now);
+            gainNode.gain.exponentialRampToValueAtTime(0.0001, now + config.duration);
+            oscillator.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            oscillator.start(now);
+            oscillator.stop(now + config.duration);
+        }
+
+        function speakText(text, options = {}) {
+            const kind = options.kind || 'guidance';
+            const force = options.force === true;
+            if (!text || !window.speechSynthesis) return;
+            if (kind === 'guidance' && !audioState.prefs.guidance) return;
+            if (kind === 'praise' && !audioState.prefs.praise) return;
+            const now = Date.now();
+            if (!force) {
+                if (kind === 'guidance') {
+                    if (text === audioState.lastGuidanceText && now - audioState.lastGuidanceAt < 2400) return;
+                    if (now - audioState.lastGuidanceAt < 1800) return;
+                }
+                if (kind === 'praise' && now - audioState.lastPraiseAt < 3200) return;
+            }
+            try {
+                if (kind === 'guidance') {
+                    speechSynthesis.cancel();
+                    audioState.lastGuidanceText = text;
+                    audioState.lastGuidanceAt = now;
+                } else if (kind === 'praise') {
+                    audioState.lastPraiseAt = now;
+                }
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-CN';
+                utterance.rate = kind === 'guidance' ? 1.03 : 1.0;
+                utterance.pitch = kind === 'praise' ? 1.05 : 1.0;
+                utterance.volume = audioState.prefs.volume;
+                speechSynthesis.speak(utterance);
+            } catch (error) {
+                console.warn('speech failed', error);
+            }
+        }
+
+        function maybeSpeakFeedback(main, phase) {
+            if (!app.training || phase === 'IDLE') return;
+            speakText(main, { kind: 'guidance' });
+        }
+
+        function speakPraiseLine(line) {
+            speakText(line || PRAISE_LINES[Math.floor(Math.random() * PRAISE_LINES.length)], { kind: 'praise' });
+        }
+
+        function closeSoundPanel() {
+            soundPanel.classList.remove('is-open');
+            soundToggle.textContent = '声音提示';
+        }
+
+        function toggleSoundPanel() {
+            const isOpen = !soundPanel.classList.contains('is-open');
+            soundPanel.classList.toggle('is-open', isOpen);
+            soundToggle.textContent = isOpen ? '收起声音' : '声音提示';
+        }
+
+        function updateAudioPrefs() {
+            unlockAudio();
+            audioState.prefs.effects = soundEffectsToggle.checked;
+            audioState.prefs.guidance = voiceGuidanceToggle.checked;
+            audioState.prefs.praise = voicePraiseToggle.checked;
+            audioState.prefs.volume = Number(audioVolumeRange.value || 80) / 100;
+            saveAudioPrefs();
+        }
+
+        function loadStudents() {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) return parsed;
+                } catch (err) {
+                    console.warn('Failed to load student store', err);
+                }
+            }
+            return { '默认学生': [] };
+        }
+
+        function saveStudents() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(app.students));
+        }
+
+        function ensureCurrentStudent() {
+            const names = Object.keys(app.students);
+            if (!names.includes(app.currentStudent)) app.currentStudent = names[0];
+        }
+
+        function renderStudentOptions() {
+            ensureCurrentStudent();
+            studentSelect.innerHTML = '';
+            Object.keys(app.students).forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                studentSelect.appendChild(option);
+            });
+            studentSelect.value = app.currentStudent;
+            studentToggle.textContent = app.currentStudent;
+            renderHistory();
+        }
+
+        function closeStudentPanel() {
+            studentPanel.classList.remove('is-open');
+            studentToggle.textContent = '学生管理';
+        }
+
+        function toggleStudentPanel() {
+            const isOpen = !studentPanel.classList.contains('is-open');
+            studentPanel.classList.toggle('is-open', isOpen);
+            studentToggle.textContent = isOpen ? '收起管理' : '学生管理';
+        }
+
+        function addStudent() {
+            const name = prompt('请输入学生姓名');
+            if (!name) return;
+            const trimmed = name.trim();
+            if (!trimmed || app.students[trimmed]) return;
+            app.students[trimmed] = [];
+            app.currentStudent = trimmed;
+            saveStudents();
+            renderStudentOptions();
+            closeStudentPanel();
+        }
+
+        function renameStudent() {
+            const oldName = app.currentStudent;
+            const name = prompt('请输入新的学生姓名', oldName);
+            if (!name) return;
+            const trimmed = name.trim();
+            if (!trimmed || trimmed === oldName || app.students[trimmed]) return;
+            app.students[trimmed] = app.students[oldName];
+            delete app.students[oldName];
+            app.currentStudent = trimmed;
+            saveStudents();
+            renderStudentOptions();
+            closeStudentPanel();
+        }
+
+        function changeStudent() {
+            app.currentStudent = studentSelect.value;
+            renderHistory();
+            resetRound(true);
+            closeStudentPanel();
+        }
+
+        function clearCurrentStudentHistory() {
+            if (!confirm(`确定清空 ${app.currentStudent} 的历史记录吗？`)) return;
+            app.students[app.currentStudent] = [];
+            saveStudents();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            const records = app.students[app.currentStudent] || [];
+            if (records.length === 0) {
+                historyList.innerHTML = '<div class="history-item"><div class="result">当前学生还没有保存的跳远记录。</div></div>';
+                return;
+            }
+            [...records].reverse().forEach(record => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <div class="time">${record.time}</div>
+                    <div class="result">
+                        <strong>成功 ${record.successCount} 次，未成功 ${record.failedCount} 次</strong><br>
+                        主要原因：${record.topReasonsText || '本轮动作较完整'}<br>
+                        建议：${record.suggestion}
+                    </div>
+                `;
+                historyList.appendChild(div);
+            });
+        }
+
+        function currentMode() {
+            return modeSelect.value;
+        }
+
+        function renderDrills() {
+            const drills = DRILL_CONTENT[currentMode()] || [];
+            drillList.innerHTML = drills.map(item => `
+                <div class="drill-item">
+                    <strong>${item.title}</strong>
+                    <span>${item.text}</span>
+                </div>
+            `).join('');
+        }
+
+        function changeMode() {
+            resetRound(false);
+            renderDrills();
+            if (currentMode() === 'arms') {
+                updateFeedback('当前为摆臂专项', '重点体会大臂后摆到前上摆，不要只甩小臂。', 'READY');
+            } else if (currentMode() === 'preload') {
+                updateFeedback('当前为预摆蹬伸专项', '重点体会膝髋共同下沉，再快速蹬伸起跳。', 'READY');
+            } else if (currentMode() === 'landing') {
+                updateFeedback('当前为落地缓冲专项', '重点体会脚跟先着地、屈膝缓冲和稳定控制。', 'READY');
+            } else {
+                updateFeedback('请侧身站立，保证全身入镜', '系统会按“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作。', 'IDLE');
+            }
+        }
+
+        function resizeCanvas() {
+            canvas.width = video.clientWidth || canvas.width;
+            canvas.height = video.clientHeight || canvas.height;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        function pointVisible(point) {
+            return point && typeof point.x === 'number' && typeof point.y === 'number' && (point.visibility == null || point.visibility >= JUMP_CONFIG.minVisibility);
+        }
+
+        function allRequiredVisible(landmarks) {
+            return REQUIRED_POINTS.every(index => pointVisible(landmarks[index]));
+        }
+
+        function midpoint(a, b) {
+            return {
+                x: (a.x + b.x) / 2,
+                y: (a.y + b.y) / 2,
+                z: (((typeof a.z === 'number' ? a.z : 0) + (typeof b.z === 'number' ? b.z : 0)) / 2)
+            };
+        }
+
+        function distance(a, b) {
+            return Math.hypot(a.x - b.x, a.y - b.y);
+        }
+
+        function getAngle2D(a, b, c) {
+            if (!a || !b || !c) return 180;
+            const abx = a.x - b.x;
+            const aby = a.y - b.y;
+            const cbx = c.x - b.x;
+            const cby = c.y - b.y;
+            const ab = Math.hypot(abx, aby);
+            const cb = Math.hypot(cbx, cby);
+            if (!ab || !cb) return 180;
+            const cosine = Math.min(1, Math.max(-1, (abx * cbx + aby * cby) / (ab * cb)));
+            return Math.acos(cosine) * 180 / Math.PI;
+        }
+
+        function getAngle3D(a, b, c) {
+            if (!a || !b || !c) return 180;
+            const ab = {
+                x: (a.x - b.x),
+                y: (a.y - b.y),
+                z: ((typeof a.z === 'number' ? a.z : 0) - (typeof b.z === 'number' ? b.z : 0))
+            };
+            const cb = {
+                x: (c.x - b.x),
+                y: (c.y - b.y),
+                z: ((typeof c.z === 'number' ? c.z : 0) - (typeof b.z === 'number' ? b.z : 0))
+            };
+            const dot = ab.x * cb.x + ab.y * cb.y + ab.z * cb.z;
+            const magAB = Math.hypot(ab.x, ab.y, ab.z);
+            const magCB = Math.hypot(cb.x, cb.y, cb.z);
+            if (!magAB || !magCB) return 180;
+            const cosine = Math.min(1, Math.max(-1, dot / (magAB * magCB)));
+            return Math.acos(cosine) * 180 / Math.PI;
+        }
+
+        function getAngle(a, b, c) {
+            const angle2D = getAngle2D(a, b, c);
+            const angle3D = getAngle3D(a, b, c);
+            const diff = Math.abs(angle3D - angle2D);
+            if (diff <= 18) return angle3D;
+            if (diff >= 45) return angle2D;
+            const weight3D = (45 - diff) / (45 - 18);
+            return angle2D * (1 - weight3D) + angle3D * weight3D;
+        }
+
+        function getVisibleSide(landmarks) {
+            const weights = {
+                11: 0.6, 12: 0.6,
+                15: 0.35, 16: 0.35,
+                23: 1.5, 24: 1.5,
+                25: 1.3, 26: 1.3,
+                27: 1.2, 28: 1.2,
+                29: 1.0, 30: 1.0,
+                31: 1.0, 32: 1.0
+            };
+            const leftIndexes = [11, 15, 23, 25, 27, 29, 31];
+            const rightIndexes = [12, 16, 24, 26, 28, 30, 32];
+            const score = (indexes) => indexes.reduce((sum, index) => {
+                const p = landmarks[index];
+                return sum + (((p && p.visibility) || 0) * (weights[index] || 1));
+            }, 0);
+            const leftScore = score(leftIndexes);
+            const rightScore = score(rightIndexes);
+            return leftScore >= rightScore ? 'left' : 'right';
+        }
+
+        function extractFeatures(landmarks) {
+            if (!allRequiredVisible(landmarks)) return null;
+            const hipMid = midpoint(landmarks[23], landmarks[24]);
+            const shoulderMid = midpoint(landmarks[11], landmarks[12]);
+            const side = getVisibleSide(landmarks);
+            const useLeft = side === 'left';
+            const hip = landmarks[useLeft ? 23 : 24];
+            const knee = landmarks[useLeft ? 25 : 26];
+            const ankle = landmarks[useLeft ? 27 : 28];
+            const heel = landmarks[useLeft ? 29 : 30];
+            const footIndex = landmarks[useLeft ? 31 : 32];
+            const shoulder = landmarks[useLeft ? 11 : 12];
+            const wrist = landmarks[useLeft ? 15 : 16];
+            const otherShoulder = landmarks[useLeft ? 12 : 11];
+            const torso = Math.max(distance(shoulderMid, hipMid), 0.001);
+            const shoulderWidth = Math.max(distance(landmarks[11], landmarks[12]), 0.001);
+            const leftAnkle = landmarks[27];
+            const rightAnkle = landmarks[28];
+            const leftLift = hipMid.y - leftAnkle.y;
+            const rightLift = hipMid.y - rightAnkle.y;
+            const ankleAsync = Math.abs(leftLift - rightLift) / torso;
+            const ankleForwardAsync = Math.abs(leftAnkle.x - rightAnkle.x) / torso;
+            return {
+                hipMid,
+                ankle,
+                wrist,
+                torso,
+                shoulderWidth,
+                kneeAngle2D: getAngle2D(hip, knee, ankle),
+                kneeAngle3D: getAngle3D(hip, knee, ankle),
+                hipAngle2D: getAngle2D(shoulder, hip, knee),
+                hipAngle3D: getAngle3D(shoulder, hip, knee),
+                kneeAngle: getAngle(hip, knee, ankle),
+                hipAngle: getAngle(shoulder, hip, knee),
+                armLift: (shoulder.y - wrist.y) / torso,
+                wristBack: Math.abs(wrist.x - otherShoulder.x) / shoulderWidth,
+                heelLead: (heel.y - footIndex.y) / torso,
+                ankleAsync,
+                ankleForwardAsync,
+                lowerBodyVisible: [23, 24, 25, 26, 27, 28, 29, 30, 31, 32].every(index => pointVisible(landmarks[index]))
+            };
+        }
+
+        function blendNumber(prev, curr, alpha) {
+            if (!Number.isFinite(prev)) return curr;
+            if (!Number.isFinite(curr)) return prev;
+            return prev * (1 - alpha) + curr * alpha;
+        }
+
+        function blendPoint(prev, curr, alpha) {
+            if (!prev) return curr;
+            if (!curr) return prev;
+            return {
+                x: blendNumber(prev.x, curr.x, alpha),
+                y: blendNumber(prev.y, curr.y, alpha),
+                z: blendNumber(prev.z, curr.z, alpha)
+            };
+        }
+
+        function smoothFeatures(features) {
+            const alpha = JUMP_CONFIG.emaAlpha;
+            const prev = app.smoothFeatures;
+            if (!prev) {
+                app.smoothFeatures = {
+                    ...features,
+                    hipMid: { ...features.hipMid },
+                    ankle: { ...features.ankle },
+                    wrist: { ...features.wrist }
+                };
+                return app.smoothFeatures;
+            }
+            const next = {
+                ...features,
+                hipMid: blendPoint(prev.hipMid, features.hipMid, alpha),
+                ankle: blendPoint(prev.ankle, features.ankle, alpha),
+                wrist: blendPoint(prev.wrist, features.wrist, alpha),
+                torso: blendNumber(prev.torso, features.torso, alpha),
+                shoulderWidth: blendNumber(prev.shoulderWidth, features.shoulderWidth, alpha),
+                kneeAngle2D: blendNumber(prev.kneeAngle2D, features.kneeAngle2D, alpha),
+                kneeAngle3D: blendNumber(prev.kneeAngle3D, features.kneeAngle3D, alpha),
+                kneeAngle: blendNumber(prev.kneeAngle, features.kneeAngle, alpha),
+                hipAngle2D: blendNumber(prev.hipAngle2D, features.hipAngle2D, alpha),
+                hipAngle3D: blendNumber(prev.hipAngle3D, features.hipAngle3D, alpha),
+                hipAngle: blendNumber(prev.hipAngle, features.hipAngle, alpha),
+                armLift: blendNumber(prev.armLift, features.armLift, alpha),
+                wristBack: blendNumber(prev.wristBack, features.wristBack, alpha),
+                heelLead: blendNumber(prev.heelLead, features.heelLead, alpha),
+                ankleAsync: blendNumber(prev.ankleAsync, features.ankleAsync, alpha),
+                ankleForwardAsync: blendNumber(prev.ankleForwardAsync, features.ankleForwardAsync, alpha)
+            };
+            app.smoothFeatures = next;
+            return next;
+        }
+
+        function resetRound(keepFeedback) {
+            app.round = { startedAt: Date.now(), practiceCount: 0, successCount: 0, failedCount: 0, failReasons: {}, improvementReasons: {} };
+            app.phase = 'IDLE';
+            app.phaseFrames = 0;
+            app.phaseStartedAt = 0;
+            app.attemptStartedAt = 0;
+            app.readyFrames = 0;
+            app.cooldownFrames = 0;
+            app.stableFrames = 0;
+            app.prevHipX = null;
+            app.prevHipY = null;
+            app.baseline = null;
+            app.attempt = null;
+            app.targetLock = null;
+            app.targetGraceFrames = 0;
+            app.lowerBodyLossFrames = 0;
+            app.smoothFeatures = null;
+            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
+            app.drillPhase = 'IDLE';
+            app.drillFrames = 0;
+            updateCounters();
+            if (!keepFeedback) {
+                updateFeedback('请侧身站立，保证全身入镜', '系统会按“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作。', 'IDLE');
+                renderRoundSummary();
+            }
+        }
+
+        function updateCounters() {
+            practiceCountEl.textContent = app.round ? app.round.practiceCount : 0;
+        }
+
+        function setPhase(phase) {
+            app.phase = phase;
+            app.phaseFrames = 0;
+            app.phaseStartedAt = Date.now();
+            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
+            const labels = { IDLE: '阶段：待机', READY: '阶段：站稳准备', PRELOAD: '阶段：预摆蓄力', TAKEOFF: '阶段：起跳发力', FLIGHT: '阶段：腾空前移', LANDING: '阶段：落地缓冲' };
+            phaseBadge.textContent = labels[phase] || '阶段：待机';
+        }
+
+        function getPhaseElapsedMs() {
+            return app.phaseStartedAt ? Date.now() - app.phaseStartedAt : 0;
+        }
+
+        function updateFeedback(main, sub, phase) {
+            feedbackMain.textContent = main;
+            feedbackSub.textContent = sub;
+            if (phase) setPhase(phase);
+            maybeSpeakFeedback(main, phase);
+        }
+
+        function incrementReason(bucket, code) {
+            bucket[code] = (bucket[code] || 0) + 1;
+        }
+
+        function topReasonEntries(bucket) {
+            return Object.entries(bucket).sort((a, b) => b[1] - a[1]).slice(0, 2);
+        }
+
+        function buildTopReasonText(bucket) {
+            const entries = topReasonEntries(bucket);
+            if (entries.length === 0) return '';
+            return entries.map(([code, count]) => `${ISSUE_META[code].label}${count}次`).join('，');
+        }
+
+        function hasAttemptSignal(features) {
+            if (!app.baseline) return false;
+            const torsoRef = Math.max(app.baseline.torso || features.torso || 0.001, 0.001);
+            const hipDrop = (features.hipMid.y - app.baseline.hipY) / torsoRef;
+            const hipForward = Math.abs(features.hipMid.x - app.baseline.hipX) / torsoRef;
+            return (
+                features.kneeAngle <= JUMP_CONFIG.preloadKneeMax ||
+                features.hipAngle <= JUMP_CONFIG.preloadHipMax ||
+                hipDrop > (JUMP_CONFIG.minPreloadDepth * 0.55) ||
+                hipForward > (JUMP_CONFIG.minFlightForward * 0.6) ||
+                features.wristBack > 0.2 ||
+                features.armLift > 0.03
+            );
+        }
+
+        function updateTargetLock(features) {
+            if (!app.targetLock) {
+                app.targetLock = {
+                    hipX: features.hipMid.x,
+                    hipY: features.hipMid.y,
+                    torso: features.torso,
+                    side: features.side
+                };
+                app.targetGraceFrames = 0;
+                return { accepted: true, reason: null };
+            }
+
+            const torsoRatio = features.torso / Math.max(app.targetLock.torso, 0.001);
+            const centerDistance = Math.hypot(features.hipMid.x - app.targetLock.hipX, features.hipMid.y - app.targetLock.hipY);
+            const maxDistance = Math.max(app.targetLock.torso * JUMP_CONFIG.targetTrackRatio, 0.22);
+            if (
+                torsoRatio < JUMP_CONFIG.targetTorsoMinRatio ||
+                torsoRatio > JUMP_CONFIG.targetTorsoMaxRatio ||
+                centerDistance > maxDistance
+            ) {
+                app.targetGraceFrames += 1;
+                return { accepted: false, reason: 'target_size_drift' };
+            }
+
+            app.targetLock.hipX = app.targetLock.hipX * 0.78 + features.hipMid.x * 0.22;
+            app.targetLock.hipY = app.targetLock.hipY * 0.78 + features.hipMid.y * 0.22;
+            app.targetLock.torso = app.targetLock.torso * 0.82 + features.torso * 0.18;
+            app.targetLock.side = features.side;
+            app.targetGraceFrames = 0;
+            return { accepted: true, reason: null };
+        }
+
+        function recordSimpleFailure(reasonCode, phase) {
+            if (!app.round) return;
+            app.round.practiceCount += 1;
+            app.round.failedCount += 1;
+            incrementReason(app.round.failReasons, reasonCode);
+            updateCounters();
+            updateFeedback(`本次未成功：${ISSUE_META[reasonCode].label}`, ISSUE_META[reasonCode].tip, phase || 'READY');
+            app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
+        }
+
+        function pickSuggestion() {
+            const failTop = topReasonEntries(app.round.failReasons);
+            if (failTop.length > 0) return ISSUE_META[failTop[0][0]].advice;
+            const improveTop = topReasonEntries(app.round.improvementReasons);
+            if (improveTop.length > 0) return `已经完成动作，下一轮重点优化：${ISSUE_META[improveTop[0][0]].label}。`;
+            if (currentMode() === 'arms') return '继续练大臂后摆到前上摆的完整节奏。';
+            if (currentMode() === 'preload') return '下一轮继续先屈膝预摆，再快速蹬伸。';
+            if (currentMode() === 'landing') return '下一轮继续保持脚跟着地和屈膝缓冲。';
+            return '动作整体较完整，下一轮继续保持预摆、蹬伸和落地缓冲节奏。';
+        }
+
+        function renderRoundSummary() {
+            if (!app.round) return;
+            roundSummary.innerHTML = `
+                <div class="summary-card"><strong>本轮结果</strong><p>成功 ${app.round.successCount} 次，未成功 ${app.round.failedCount} 次。</p></div>
+                <div class="summary-card"><strong>主要问题</strong><p>${buildTopReasonText(app.round.failReasons) || '本轮没有明显失败原因。'}</p></div>
+                <div class="summary-card"><strong>成功后仍可优化</strong><p>${buildTopReasonText(app.round.improvementReasons) || '本轮成功动作整体较完整。'}</p></div>
+                <div class="summary-card"><strong>下一轮建议</strong><p>${pickSuggestion()}</p></div>
+            `;
+        }
+
+        function saveRoundHistory() {
+            if (!app.round) return;
+            app.students[app.currentStudent].push({ time: new Date().toLocaleString(), successCount: app.round.successCount, failedCount: app.round.failedCount, topReasonsText: buildTopReasonText(app.round.failReasons), suggestion: pickSuggestion() });
+            saveStudents();
+            renderHistory();
+        }
+
+        function beginAttempt() {
+            app.attemptStartedAt = Date.now();
+            app.attempt = {
+                baselineHipY: app.baseline.hipY,
+                baselineHipX: app.baseline.hipX,
+                baselineAnkleY: app.baseline.ankleY,
+                baselineWristY: app.baseline.wristY,
+                baselineTorso: app.baseline.torso || 0.001,
+                maxDepth: 0,
+                maxRise: 0,
+                maxArmLift: 0,
+                maxForward: 0,
+                landingKneeAngle: 180,
+                maxHeelLead: -1,
+                maxAnkleAsync: 0,
+                maxAnkleForwardAsync: 0
+            };
+            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
+            updateFeedback('进入预摆阶段', '继续下蹲预摆，准备快速蹬地起跳。', 'PRELOAD');
+        }
+
+        function recordFailure(reasonCode) {
+            if (!app.round || !app.attempt) return;
+            app.round.practiceCount += 1;
+            app.round.failedCount += 1;
+            incrementReason(app.round.failReasons, reasonCode);
+            updateCounters();
+            playTone('warning');
+            updateFeedback(`本次未完成：${ISSUE_META[reasonCode].label}`, ISSUE_META[reasonCode].tip, 'READY');
+            app.attempt = null;
+            app.attemptStartedAt = 0;
+            app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
+            app.targetGraceFrames = 0;
+            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
+            setPhase('READY');
+        }
+
+        function recordSuccess() {
+            if (!app.round || !app.attempt) return;
+            app.round.practiceCount += 1;
+            app.round.successCount += 1;
+            if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth + 0.01) incrementReason(app.round.improvementReasons, 'preload_weak');
+            if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise + 0.02) incrementReason(app.round.improvementReasons, 'arm_weak');
+            if (app.attempt.landingKneeAngle > 132) incrementReason(app.round.improvementReasons, 'landing_stiff');
+            if (app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin) incrementReason(app.round.improvementReasons, 'heel_late');
+            updateCounters();
+            playTone('success');
+            updateFeedback('本次练习完成', '继续保持预摆、蹬地和脚跟着地的完整节奏。', 'READY');
+            speakPraiseLine();
+            app.attempt = null;
+            app.attemptStartedAt = 0;
+            app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
+            app.targetGraceFrames = 0;
+            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
+            setPhase('READY');
+        }
+
+        function updateBaseline(features) {
+            const motion = app.prevHipY == null ? 0 : Math.abs(features.hipMid.y - app.prevHipY) + Math.abs(features.hipMid.x - app.prevHipX);
+            app.stableFrames = motion < JUMP_CONFIG.stableMotionThreshold ? app.stableFrames + 1 : 0;
+            if (features.kneeAngle >= JUMP_CONFIG.readyKneeMin && features.hipAngle >= JUMP_CONFIG.readyHipMin && app.stableFrames >= 2) {
+                app.readyFrames += 1;
+                if (!app.baseline) app.baseline = { hipY: features.hipMid.y, hipX: features.hipMid.x, ankleY: features.ankle.y, wristY: features.wrist.y, torso: features.torso };
+                else {
+                    app.baseline.hipY = app.baseline.hipY * 0.85 + features.hipMid.y * 0.15;
+                    app.baseline.hipX = app.baseline.hipX * 0.85 + features.hipMid.x * 0.15;
+                    app.baseline.ankleY = app.baseline.ankleY * 0.85 + features.ankle.y * 0.15;
+                    app.baseline.wristY = app.baseline.wristY * 0.85 + features.wrist.y * 0.15;
+                    app.baseline.torso = app.baseline.torso * 0.85 + features.torso * 0.15;
+                }
+                if (app.readyFrames >= JUMP_CONFIG.readyHoldFrames) updateFeedback('已准备好，先下蹲预摆再起跳', '请保持侧身、全身入镜，完成完整跳远动作。', 'READY');
+                if (app.phase === 'IDLE') setPhase('READY');
+            } else if (!app.attempt) {
+                app.readyFrames = Math.max(0, app.readyFrames - 1);
+            }
+        }
+
+        function handleReady(features) {
+            if (app.readyFrames < JUMP_CONFIG.readyHoldFrames) {
+                if (hasAttemptSignal(features) && app.cooldownFrames === 0) {
+                    recordSimpleFailure('not_ready', 'READY');
+                    return;
+                }
+                updateFeedback('先站稳准备', '请侧身站立，双脚完整入镜，保持 1 秒稳定。', 'READY');
+                return;
+            }
+            if (hasAttemptSignal(features)) beginAttempt();
+        }
+
+        function handlePreload(features) {
+            app.phaseFrames += 1;
+            const depthRatio = (features.hipMid.y - app.attempt.baselineHipY) / Math.max(app.attempt.baselineTorso, 0.001);
+            app.attempt.maxDepth = Math.max(app.attempt.maxDepth, depthRatio);
+            app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
+            if (app.phaseFrames < JUMP_CONFIG.preloadMinFrames) return;
+            const riseFromDeepest = app.attempt.maxDepth - depthRatio;
+            if (features.kneeAngle >= JUMP_CONFIG.takeoffKneeMin && riseFromDeepest >= JUMP_CONFIG.takeoffRise) {
+                app.confirmFrames.takeoff += 1;
+                if (app.confirmFrames.takeoff >= JUMP_CONFIG.takeoffConfirmFrames) {
+                    updateFeedback('进入蹬伸起跳', '继续快速伸髋伸膝，同时摆臂前上。', 'TAKEOFF');
+                    setPhase('TAKEOFF');
+                    return;
+                }
+            } else {
+                app.confirmFrames.takeoff = 0;
+            }
+            if (getPhaseElapsedMs() > JUMP_CONFIG.preloadTimeoutMs) recordFailure(app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth ? 'preload_weak' : 'takeoff_weak');
+        }
+
+        function handleTakeoff(features) {
+            app.phaseFrames += 1;
+            const torsoRef = Math.max(app.attempt.baselineTorso, 0.001);
+            app.attempt.maxRise = Math.max(app.attempt.maxRise, (app.attempt.baselineHipY - features.hipMid.y) / torsoRef);
+            app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
+            app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX) / torsoRef);
+            const ankleLift = (app.attempt.baselineAnkleY - features.ankle.y) / torsoRef;
+            app.attempt.maxAnkleAsync = Math.max(app.attempt.maxAnkleAsync, features.ankleAsync);
+            app.attempt.maxAnkleForwardAsync = Math.max(app.attempt.maxAnkleForwardAsync, features.ankleForwardAsync);
+            if (app.attempt.maxRise >= JUMP_CONFIG.takeoffRise && (ankleLift > JUMP_CONFIG.takeoffRise || app.attempt.maxForward >= JUMP_CONFIG.minFlightForward)) {
+                app.confirmFrames.flight += 1;
+                if (app.confirmFrames.flight >= JUMP_CONFIG.flightConfirmFrames) {
+                    updateFeedback('进入腾空阶段', '保持身体前移，准备脚跟先着地。', 'FLIGHT');
+                    setPhase('FLIGHT');
+                    return;
+                }
+            } else {
+                app.confirmFrames.flight = 0;
+            }
+            if (getPhaseElapsedMs() > JUMP_CONFIG.takeoffTimeoutMs) {
+                if (app.attempt.maxAnkleAsync > JUMP_CONFIG.doubleTakeoffSyncRatio || app.attempt.maxAnkleForwardAsync > JUMP_CONFIG.doubleTakeoffSyncRatio) {
+                    recordFailure('double_takeoff_async');
+                } else {
+                    recordFailure(app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise ? 'arm_weak' : 'takeoff_weak');
+                }
+            }
+        }
+
+        function handleFlight(features) {
+            app.phaseFrames += 1;
+            app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX));
+            app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            if (features.kneeAngle <= JUMP_CONFIG.landingKneeMax || features.heelLead >= JUMP_CONFIG.heelLeadMin) {
+                app.confirmFrames.landing += 1;
+                if (app.confirmFrames.landing >= JUMP_CONFIG.landingConfirmFrames) {
+                    app.attempt.landingKneeAngle = features.kneeAngle;
+                    updateFeedback('进入落地缓冲', '脚跟先着地，随后主动屈膝缓冲。', 'LANDING');
+                    setPhase('LANDING');
+                    return;
+                }
+            } else {
+                app.confirmFrames.landing = 0;
+            }
+            if (getPhaseElapsedMs() > JUMP_CONFIG.flightTimeoutMs) recordFailure(app.attempt.maxForward < JUMP_CONFIG.minFlightForward ? 'flight_short' : 'landing_stiff');
+        }
+
+        function handleLanding(features) {
+            app.phaseFrames += 1;
+            app.attempt.landingKneeAngle = Math.min(app.attempt.landingKneeAngle, features.kneeAngle);
+            app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            if (features.kneeAngle <= JUMP_CONFIG.landingKneeMax && app.phaseFrames >= 2) {
+                app.confirmFrames.landing += 1;
+                if (app.confirmFrames.landing >= JUMP_CONFIG.landingConfirmFrames) {
+                    recordSuccess();
+                    return;
+                }
+            } else {
+                app.confirmFrames.landing = 0;
+            }
+            if (getPhaseElapsedMs() > JUMP_CONFIG.landingTimeoutMs) {
+                recordFailure(app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin ? 'heel_late' : 'landing_stiff');
+            }
+        }
+
+        function handleArmDrill(features) {
+            if (app.readyFrames < JUMP_CONFIG.readyHoldFrames) {
+                updateFeedback('先站稳准备', '摆臂专项开始前也要先站稳，保证全身入镜。', 'READY');
+                return;
+            }
+            if (app.cooldownFrames > 0) {
+                app.cooldownFrames -= 1;
+                return;
+            }
+            if (app.drillPhase === 'IDLE') {
+                if (features.wristBack >= 0.28) {
+                    app.drillPhase = 'BACK';
+                    app.drillFrames = 0;
+                    updateFeedback('已完成后摆', '继续把双臂快速前上摆。', 'PRELOAD');
+                } else {
+                    updateFeedback('摆臂专项练习', '先让手臂明显后摆，再快速前上摆。', 'READY');
+                }
+                return;
+            }
+            app.drillFrames += 1;
+            if (features.armLift >= 0.08) {
+                app.round.practiceCount += 1;
+                app.round.successCount += 1;
+                updateCounters();
+                if (features.armLift < 0.12) incrementReason(app.round.improvementReasons, 'arm_weak');
+                playTone('success');
+                updateFeedback('摆臂专项成功', '继续保持后摆到位、前摆快速。', 'READY');
+                speakPraiseLine('摆臂这次很到位，继续保持。');
+                app.drillPhase = 'IDLE';
+                app.cooldownFrames = 12;
+                return;
+            }
+            if (app.drillFrames > 18) {
+                app.round.practiceCount += 1;
+                app.round.failedCount += 1;
+                incrementReason(app.round.failReasons, 'arm_weak');
+                updateCounters();
+                playTone('warning');
+                updateFeedback('本次摆臂未成功', ISSUE_META.arm_weak.tip, 'READY');
+                app.drillPhase = 'IDLE';
+                app.cooldownFrames = 12;
+            }
+        }
+
+        function handlePreloadDrill(features) {
+            if (app.readyFrames < JUMP_CONFIG.readyHoldFrames) {
+                updateFeedback('先站稳准备', '预摆蹬伸专项开始前，也要先站稳并侧身入镜。', 'READY');
+                return;
+            }
+            if (app.cooldownFrames > 0) {
+                app.cooldownFrames -= 1;
+                return;
+            }
+            if (app.drillPhase === 'IDLE') {
+                if (features.kneeAngle <= JUMP_CONFIG.preloadKneeMax || features.hipAngle <= JUMP_CONFIG.preloadHipMax) {
+                    app.drillPhase = 'PRELOAD';
+                    app.drillFrames = 0;
+                    updateFeedback('已进入预摆', '继续下蹲，再快速蹬伸起跳。', 'PRELOAD');
+                } else {
+                    updateFeedback('预摆蹬伸专项', '先屈膝下蹲，再快速伸髋伸膝。', 'READY');
+                }
+                return;
+            }
+            app.drillFrames += 1;
+            if (features.kneeAngle >= JUMP_CONFIG.takeoffKneeMin) {
+                app.round.practiceCount += 1;
+                app.round.successCount += 1;
+                updateCounters();
+                playTone('success');
+                updateFeedback('预摆蹬伸完成', '膝髋打开较及时，继续保持。', 'READY');
+                speakPraiseLine('这次蹬伸很连贯，继续保持。');
+                app.drillPhase = 'IDLE';
+                app.cooldownFrames = 12;
+                return;
+            }
+            if (app.drillFrames > 18) {
+                app.round.practiceCount += 1;
+                app.round.failedCount += 1;
+                incrementReason(app.round.failReasons, 'takeoff_weak');
+                updateCounters();
+                playTone('warning');
+                updateFeedback('本次蹬伸未充分', ISSUE_META.takeoff_weak.tip, 'READY');
+                app.drillPhase = 'IDLE';
+                app.cooldownFrames = 12;
+            }
+        }
+
+        function handleLandingDrill(features) {
+            if (app.readyFrames < JUMP_CONFIG.readyHoldFrames) {
+                updateFeedback('先站稳准备', '落地缓冲专项开始前先站稳，准备做小跳缓冲。', 'READY');
+                return;
+            }
+            if (app.cooldownFrames > 0) {
+                app.cooldownFrames -= 1;
+                return;
+            }
+            if (app.drillPhase === 'IDLE') {
+                if (features.kneeAngle > 155) {
+                    updateFeedback('落地缓冲专项', '做一次小跳或快速下落，脚跟先着地，随后主动屈膝缓冲。', 'READY');
+                }
+                if (features.kneeAngle < 138 || features.heelLead >= JUMP_CONFIG.heelLeadMin) {
+                    app.drillPhase = 'LANDING';
+                    app.drillFrames = 0;
+                }
+                return;
+            }
+            app.drillFrames += 1;
+            if (features.kneeAngle <= 120 && features.heelLead >= JUMP_CONFIG.heelLeadMin) {
+                app.round.practiceCount += 1;
+                app.round.successCount += 1;
+                updateCounters();
+                playTone('success');
+                updateFeedback('落地缓冲完成', '脚跟着地和屈膝缓冲都比较到位。', 'READY');
+                speakPraiseLine('落地缓冲做得不错，继续保持。');
+                app.drillPhase = 'IDLE';
+                app.cooldownFrames = 12;
+                return;
+            }
+            if (app.drillFrames > 12) {
+                app.round.practiceCount += 1;
+                app.round.failedCount += 1;
+                incrementReason(app.round.failReasons, features.heelLead < JUMP_CONFIG.heelLeadMin ? 'heel_late' : 'landing_stiff');
+                updateCounters();
+                playTone('warning');
+                updateFeedback('本次落地缓冲未完成', features.heelLead < JUMP_CONFIG.heelLeadMin ? ISSUE_META.heel_late.tip : ISSUE_META.landing_stiff.tip, 'READY');
+                app.drillPhase = 'IDLE';
+                app.cooldownFrames = 12;
+            }
+        }
+
+        function analyzeMotion(landmarks) {
+            const features = extractFeatures(landmarks);
+            if (!features) {
+                if (app.training) {
+                    app.lowerBodyLossFrames += 1;
+                    if (app.lowerBodyLossFrames > JUMP_CONFIG.maxLowerBodyLossFrames && app.attempt) {
+                        recordFailure('keypoint_lost');
+                    } else {
+                        updateFeedback('请保持全身完整入镜', ISSUE_META.keypoint_lost.tip, app.phase === 'IDLE' ? 'IDLE' : 'READY');
+                    }
+                }
+                app.prevHipX = null;
+                app.prevHipY = null;
+                app.smoothFeatures = null;
+                return;
+            }
+            app.lowerBodyLossFrames = 0;
+            const targetStatus = updateTargetLock(features);
+            if (!targetStatus.accepted) {
+                if (app.training) {
+                    if (app.targetGraceFrames > JUMP_CONFIG.targetGraceFrames) {
+                        updateFeedback('请保持与镜头距离稳定', ISSUE_META.target_size_drift.tip, app.phase === 'IDLE' ? 'IDLE' : app.phase);
+                        if (app.attempt) {
+                            recordFailure('target_size_drift');
+                        }
+                    }
+                }
+                return;
+            }
+            const stableFeatures = smoothFeatures(features);
+            updateBaseline(stableFeatures);
+            app.prevHipX = stableFeatures.hipMid.x;
+            app.prevHipY = stableFeatures.hipMid.y;
+            if (!app.training) return;
+            if (currentMode() === 'arms') {
+                handleArmDrill(stableFeatures);
+                return;
+            }
+            if (currentMode() === 'preload') {
+                handlePreloadDrill(stableFeatures);
+                return;
+            }
+            if (currentMode() === 'landing') {
+                handleLandingDrill(stableFeatures);
+                return;
+            }
+            if (app.cooldownFrames > 0) {
+                app.cooldownFrames -= 1;
+                return;
+            }
+            switch (app.phase) {
+                case 'IDLE':
+                case 'READY':
+                    handleReady(stableFeatures);
+                    break;
+                case 'PRELOAD':
+                    handlePreload(stableFeatures);
+                    break;
+                case 'TAKEOFF':
+                    handleTakeoff(stableFeatures);
+                    break;
+                case 'FLIGHT':
+                    handleFlight(stableFeatures);
+                    break;
+                case 'LANDING':
+                    handleLanding(stableFeatures);
+                    break;
+                default:
+                    setPhase('READY');
+            }
+        }
+
+        function drawSkeleton(landmarks) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            if (!landmarks) return;
+            ctx.save();
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'rgba(36, 107, 255, 0.92)';
+            ctx.beginPath();
+            CONNECTORS.forEach(([from, to]) => {
+                const p1 = landmarks[from];
+                const p2 = landmarks[to];
+                if (!p1 || !p2) return;
+                ctx.moveTo((1 - p1.x) * canvas.width, p1.y * canvas.height);
+                ctx.lineTo((1 - p2.x) * canvas.width, p2.y * canvas.height);
+            });
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(31, 157, 85, 0.95)';
+            landmarks.forEach(point => {
+                if (!pointVisible(point)) return;
+                ctx.beginPath();
+                ctx.arc((1 - point.x) * canvas.width, point.y * canvas.height, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+
+        function onResults(results) {
+            if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) resizeCanvas();
+            drawSkeleton(results.poseLandmarks || null);
+            if (results.poseLandmarks) analyzeMotion(results.poseLandmarks);
+        }
+
+        function toggleTraining() {
+            if (!app.ready) return;
+            unlockAudio();
+            app.training = !app.training;
+            startBtn.textContent = app.training ? '暂停分析' : '开始分析';
+            startBtn.className = app.training ? 'danger' : 'primary';
+            if (app.training) {
+                resetRound(false);
+                playTone('start');
+                updateFeedback('请先站稳准备', '侧身站立，保持 1 秒稳定后再进入预摆。', 'IDLE');
+                speakText('开始练习，请先站稳准备。', { kind: 'guidance', force: true });
+            } else {
+                finishRound(false);
+            }
+        }
+
+        function finishRound(showIdleMessage = true) {
+            if (!app.round) return;
+            if (app.training) {
+                app.training = false;
+                startBtn.textContent = '开始分析';
+                startBtn.className = 'primary';
+            }
+            renderRoundSummary();
+            saveRoundHistory();
+            playTone('finish');
+            const suggestion = pickSuggestion();
+            speakText(`本轮练习${app.round.practiceCount}次。${suggestion}`, { kind: 'guidance', force: true });
+            if (showIdleMessage) updateFeedback('本轮已结束', '可切换学生或点击开始分析，进入下一轮。', 'IDLE');
+        }
+
+        async function initCamera() {
+            overlay.style.display = 'flex';
+            overlayText.textContent = '正在打开摄像头并加载姿态识别，请允许摄像头权限。';
+            try {
+                const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+                pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                pose.onResults(onResults);
+                const camera = new Camera(video, {
+                    onFrame: async () => { await pose.send({ image: video }); },
+                    width: 640,
+                    height: 480
+                });
+                await camera.start();
+                resizeCanvas();
+                app.ready = true;
+                overlay.style.display = 'none';
+                updateFeedback('请侧身站立，保证全身入镜', '开始分析后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
+            } catch (error) {
+                console.error(error);
+                overlay.style.display = 'flex';
+                overlayText.textContent = `初始化失败：${String(error && error.message ? error.message : error)}`;
+            }
+        }
+
+        function renderStudentOptions() {
+            ensureCurrentStudent();
+            studentSelect.innerHTML = '';
+            Object.keys(app.students).forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                studentSelect.appendChild(option);
+            });
+            studentSelect.value = app.currentStudent;
+            studentToggle.textContent = app.currentStudent;
+            renderHistory();
+        }
+
+        function closeStudentPanel() {
+            studentPanel.classList.remove('is-open');
+            studentToggle.textContent = app.currentStudent;
+        }
+
+        function toggleStudentPanel() {
+            const isOpen = !studentPanel.classList.contains('is-open');
+            studentPanel.classList.toggle('is-open', isOpen);
+            studentToggle.textContent = isOpen ? '收起管理' : app.currentStudent;
+        }
+
+        function deleteStudent() {
+            const names = Object.keys(app.students);
+            if (names.length <= 1) return;
+            if (!confirm(`确定删除 ${app.currentStudent} 吗？`)) return;
+            delete app.students[app.currentStudent];
+            app.currentStudent = Object.keys(app.students)[0];
+            saveStudents();
+            renderStudentOptions();
+            closeStudentPanel();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            const records = app.students[app.currentStudent] || [];
+            if (records.length === 0) {
+                historyList.innerHTML = '<div class="history-item"><div class="result">当前学生还没有保存的练习记录。</div></div>';
+                return;
+            }
+            [...records].reverse().forEach(record => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <div class="time">${record.time}</div>
+                    <div class="result">
+                        <strong>本轮练习 ${record.practiceCount || 0} 次</strong><br>
+                        主要指导：${record.topReasonsText || '本轮动作较完整'}<br>
+                        下一轮建议：${record.suggestion}
+                    </div>
+                `;
+                historyList.appendChild(div);
+            });
+        }
+
+        function renderRoundSummary() {
+            if (!app.round) return;
+            roundSummary.innerHTML = `
+                <div class="summary-card"><strong>本轮结果</strong><p>本轮共练习 ${app.round.practiceCount} 次。</p></div>
+                <div class="summary-card"><strong>主要指导</strong><p>${buildTopReasonText(app.round.failReasons) || '本轮没有明显动作问题。'}</p></div>
+                <div class="summary-card"><strong>继续保持</strong><p>${buildTopReasonText(app.round.improvementReasons) || '整体动作较完整，继续保持预摆、蹬伸和落地缓冲节奏。'}</p></div>
+                <div class="summary-card"><strong>下一轮建议</strong><p>${pickSuggestion()}</p></div>
+            `;
+        }
+
+        function saveRoundHistory() {
+            if (!app.round) return;
+            app.students[app.currentStudent].push({
+                time: new Date().toLocaleString(),
+                practiceCount: app.round.practiceCount,
+                topReasonsText: buildTopReasonText(app.round.failReasons) || buildTopReasonText(app.round.improvementReasons),
+                suggestion: pickSuggestion()
+            });
+            saveStudents();
+            renderHistory();
+        }
+
+        normalizePracticeUi();
+        applyAudioPrefsToUi();
+        app.currentStudent = Object.keys(app.students)[0];
+        renderStudentOptions();
+        renderDrills();
+        resetRound(false);
+        initCamera();
+    </script>
+</body>
+</html>
+
+
+
+
