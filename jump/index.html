@@ -148,6 +148,7 @@
             top: calc(100% + 10px);
             left: 0;
             min-width: 330px;
+            flex-wrap: wrap;
             opacity: 0;
             pointer-events: none;
             transform: translateY(-6px);
@@ -159,6 +160,44 @@
             opacity: 1;
             pointer-events: auto;
             transform: translateY(0);
+        }
+
+        .student-editor {
+            display: none;
+            flex: 0 0 100%;
+            padding-top: 8px;
+            border-top: 1px solid rgba(216, 226, 240, 0.95);
+            gap: 8px;
+        }
+
+        .student-editor.is-open {
+            display: grid;
+        }
+
+        .student-editor input {
+            width: 100%;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .student-editor input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 255, 0.12);
+        }
+
+        .student-editor-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .student-editor-hint {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.6;
         }
 
         .sound-dock {
@@ -395,83 +434,6 @@
 
         .overlay-text { color: var(--muted); line-height: 1.7; }
 
-        .name-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 40;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            background: rgba(15, 23, 42, 0.36);
-            backdrop-filter: blur(6px);
-        }
-
-        .name-modal.is-open {
-            display: flex;
-        }
-
-        .name-dialog {
-            width: min(400px, calc(100vw - 24px));
-            background: #fff;
-            border: 1px solid var(--line);
-            border-radius: 24px;
-            padding: 20px;
-            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
-        }
-
-        .name-dialog h3 {
-            margin: 0;
-            font-size: 20px;
-        }
-
-        .name-dialog p {
-            margin: 10px 0 0;
-            color: var(--muted);
-            line-height: 1.7;
-            font-size: 14px;
-        }
-
-        .name-dialog input {
-            width: 100%;
-            margin-top: 16px;
-            border: 1px solid var(--line);
-            border-radius: 14px;
-            padding: 14px 16px;
-            font-size: 16px;
-            outline: none;
-        }
-
-        .name-dialog input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(36, 107, 255, 0.12);
-        }
-
-        .name-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 16px;
-            flex-wrap: wrap;
-        }
-
-        .name-actions button {
-            border: 1px solid var(--line);
-            background: #fff;
-            color: var(--text);
-            border-radius: 12px;
-            padding: 12px 16px;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .name-actions .primary {
-            border-color: transparent;
-            background: var(--primary);
-            color: #fff;
-        }
-
         @media (max-width: 960px) {
             body { overflow: auto; }
             .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
@@ -495,6 +457,14 @@
                     <select id="student-select" onchange="changeStudent()"></select>
                     <button onclick="addStudent()">新增</button>
                     <button onclick="deleteStudent()">删除</button>
+                    <div id="student-editor" class="student-editor">
+                        <input id="student-name-input" type="text" maxlength="20" autocomplete="off" placeholder="请输入学生姓名">
+                        <div class="student-editor-actions">
+                            <button class="primary" type="button" onclick="submitStudentName()">保存</button>
+                            <button type="button" onclick="closeStudentNameEditor()">取消</button>
+                        </div>
+                        <div id="student-name-hint" class="student-editor-hint">输入完成后点“保存”。</div>
+                    </div>
                 </div>
             </div>
 
@@ -581,18 +551,6 @@
                 <div class="history" id="history-list"></div>
             </section>
         </aside>
-    </div>
-
-    <div id="student-name-modal" class="name-modal" onclick="handleStudentNameBackdrop(event)">
-        <div class="name-dialog" role="dialog" aria-modal="true" aria-labelledby="student-name-title">
-            <h3 id="student-name-title">新增学生</h3>
-            <p id="student-name-hint">请输入学生姓名。</p>
-            <input id="student-name-input" type="text" maxlength="20" autocomplete="off" placeholder="例如：张三">
-            <div class="name-actions">
-                <button type="button" onclick="closeStudentNameModal()">取消</button>
-                <button type="button" class="primary" onclick="submitStudentName()">确定</button>
-            </div>
-        </div>
     </div>
 
     <script>
@@ -733,8 +691,7 @@
         const audioVolumeRange = document.getElementById('audio-volume-range');
         const titleChip = document.querySelector('.title-chip');
         const studentDock = document.querySelector('.student-dock');
-        const studentNameModal = document.getElementById('student-name-modal');
-        const studentNameTitle = document.getElementById('student-name-title');
+        const studentEditor = document.getElementById('student-editor');
         const studentNameHint = document.getElementById('student-name-hint');
         const studentNameInput = document.getElementById('student-name-input');
         const studentNameState = { mode: 'add', originalName: '' };
@@ -757,7 +714,7 @@
                 event.preventDefault();
                 submitStudentName();
             } else if (event.key === 'Escape') {
-                closeStudentNameModal();
+                closeStudentNameEditor();
             }
         });
 
@@ -945,29 +902,26 @@
             studentToggle.textContent = isOpen ? '收起管理' : '学生管理';
         }
 
-        function openStudentNameModal(mode) {
+        function openStudentNameEditor(mode) {
             studentNameState.mode = mode;
             studentNameState.originalName = mode === 'rename' ? app.currentStudent : '';
-            studentNameTitle.textContent = mode === 'rename' ? '修改学生姓名' : '新增学生';
-            studentNameHint.textContent = mode === 'rename' ? `正在修改“${app.currentStudent}”的名字。` : '请输入学生姓名。';
+            studentNameHint.textContent = mode === 'rename' ? `正在修改“${app.currentStudent}”的名字。` : '输入完成后点“保存”。';
             studentNameInput.value = mode === 'rename' ? app.currentStudent : '';
-            studentNameModal.classList.add('is-open');
+            studentEditor.classList.add('is-open');
             requestAnimationFrame(() => {
                 studentNameInput.focus();
                 studentNameInput.select();
             });
         }
 
-        function closeStudentNameModal() {
-            studentNameModal.classList.remove('is-open');
-        }
-
-        function handleStudentNameBackdrop(event) {
-            if (event.target === studentNameModal) closeStudentNameModal();
+        function closeStudentNameEditor() {
+            studentEditor.classList.remove('is-open');
+            studentNameInput.value = '';
+            studentNameHint.textContent = '输入完成后点“保存”。';
         }
 
         function addStudent() {
-            openStudentNameModal('add');
+            openStudentNameEditor('add');
         }
 
         function submitStudentName() {
@@ -989,7 +943,7 @@
             } else {
                 const oldName = studentNameState.originalName;
                 if (trimmed === oldName) {
-                    closeStudentNameModal();
+                    closeStudentNameEditor();
                     return;
                 }
                 if (app.students[trimmed]) {
@@ -1004,12 +958,12 @@
             }
             saveStudents();
             renderStudentOptions();
-            closeStudentNameModal();
+            closeStudentNameEditor();
             closeStudentPanel();
         }
 
         function renameStudent() {
-            openStudentNameModal('rename');
+            openStudentNameEditor('rename');
         }
 
         function changeStudent() {
