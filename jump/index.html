@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>立定跳远课堂分析 - 阶段状态机优化版</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
     <style>
         :root {
             --bg: #f4f7fb;
@@ -117,7 +118,6 @@
             gap: 8px;
             align-items: center;
             padding: 8px;
-            flex-wrap: wrap;
         }
 
         .student-dock {
@@ -148,7 +148,6 @@
             top: calc(100% + 10px);
             left: 0;
             min-width: 330px;
-            max-width: min(420px, calc(100vw - 32px));
             opacity: 0;
             pointer-events: none;
             transform: translateY(-6px);
@@ -395,119 +394,18 @@
         }
 
         .overlay-text { color: var(--muted); line-height: 1.7; }
-        .overlay-action {
-            margin-top: 16px;
-            border: 1px solid transparent;
-            background: var(--primary);
-            color: #fff;
-            border-radius: 12px;
-            padding: 12px 16px;
-            font-size: 15px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .name-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 40;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            background: rgba(15, 23, 42, 0.38);
-            backdrop-filter: blur(6px);
-        }
-
-        .name-modal.is-open {
-            display: flex;
-        }
-
-        .name-dialog {
-            width: min(420px, calc(100vw - 24px));
-            background: rgba(255, 255, 255, 0.98);
-            border: 1px solid rgba(216, 226, 240, 0.95);
-            border-radius: 24px;
-            padding: 20px;
-            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.18);
-        }
-
-        .name-dialog h3 {
-            margin: 0;
-            font-size: 20px;
-        }
-
-        .name-dialog p {
-            margin: 10px 0 0;
-            color: var(--muted);
-            line-height: 1.7;
-            font-size: 14px;
-        }
-
-        .name-dialog input {
-            width: 100%;
-            margin-top: 16px;
-            border: 1px solid var(--line);
-            background: #fff;
-            color: var(--text);
-            border-radius: 14px;
-            padding: 14px 16px;
-            font-size: 16px;
-            outline: none;
-        }
-
-        .name-dialog input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 4px rgba(36, 107, 255, 0.12);
-        }
-
-        .name-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-            margin-top: 16px;
-            flex-wrap: wrap;
-        }
-
-        .name-actions button {
-            border: 1px solid var(--line);
-            background: #fff;
-            color: var(--text);
-            border-radius: 12px;
-            padding: 12px 16px;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .name-actions .primary {
-            border-color: transparent;
-            background: var(--primary);
-            color: #fff;
-        }
 
         @media (max-width: 960px) {
             body { overflow: auto; }
             .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
-            .stage { min-height: 74svh; min-height: 74vh; }
-            .top-bar { top: 10px; }
-            .student-panel {
-                min-width: min(360px, calc(100vw - 24px));
-                max-width: calc(100vw - 24px);
-            }
-            .bottom-bar { left: 10px; right: 10px; bottom: 10px; }
-            .toolbar select,
-            .toolbar button,
-            .panel button {
-                min-height: 44px;
-            }
+            .stage { min-height: 54vh; }
         }
     </style>
 </head>
 <body>
     <div class="app">
         <section class="stage">
-            <video id="video-layer" playsinline webkit-playsinline autoplay muted></video>
+            <video id="video-layer" playsinline></video>
             <canvas id="draw-layer"></canvas>
 
             <div class="top-bar">
@@ -519,7 +417,6 @@
                 <div id="student-panel" class="toolbar student-panel">
                     <select id="student-select" onchange="changeStudent()"></select>
                     <button onclick="addStudent()">新增</button>
-                    <button onclick="renameStudent()">改名</button>
                     <button onclick="deleteStudent()">删除</button>
                 </div>
             </div>
@@ -558,7 +455,6 @@
                 <div class="overlay-box">
                     <div class="overlay-title">准备中</div>
                     <div class="overlay-text" id="overlay-text">正在打开摄像头并加载姿态识别，请保持网络稳定并允许摄像头权限。</div>
-                    <button id="overlay-action" class="overlay-action" style="display: none;" onclick="retryInitCamera()">重新启动摄像头</button>
                 </div>
             </div>
         </section>
@@ -610,25 +506,10 @@
         </aside>
     </div>
 
-    <div id="student-name-modal" class="name-modal" onclick="handleStudentNameBackdrop(event)">
-        <div class="name-dialog" role="dialog" aria-modal="true" aria-labelledby="student-name-title">
-            <h3 id="student-name-title">新增学生</h3>
-            <p id="student-name-hint">请输入学生姓名。手机端会直接在页面内输入，不再使用系统弹窗。</p>
-            <input id="student-name-input" type="text" maxlength="20" autocomplete="off" placeholder="例如：张三">
-            <div class="name-actions">
-                <button type="button" onclick="closeStudentNameModal()">取消</button>
-                <button type="button" class="primary" onclick="submitStudentName()">确定</button>
-            </div>
-        </div>
-    </div>
-
     <script>
         const STORAGE_KEY = 'jump-gemini-phase-studio-v1';
         const AUDIO_PREFS_KEY = 'jump-gemini-audio-prefs-v1';
-        const SIDE_POINT_GROUPS = {
-            left: [11, 15, 23, 25, 27, 29, 31],
-            right: [12, 16, 24, 26, 28, 30, 32]
-        };
+        const REQUIRED_POINTS = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
         const CONNECTORS = [
             [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
             [11, 23], [12, 24], [23, 24], [23, 25], [24, 26],
@@ -647,7 +528,6 @@
             }
         };
 
-        const IS_MOBILE = window.matchMedia('(max-width: 960px), (pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
         const JUMP_CONFIG = {
             minVisibility: 0.45,
             emaAlpha: 0.3,
@@ -680,23 +560,6 @@
             maxLowerBodyLossFrames: 3,
             doubleTakeoffSyncRatio: 0.025
         };
-        if (IS_MOBILE) {
-            Object.assign(JUMP_CONFIG, {
-                minVisibility: 0.3,
-                readyHoldFrames: 4,
-                preloadMinFrames: 2,
-                preloadTimeoutMs: 1800,
-                takeoffTimeoutMs: 1000,
-                flightTimeoutMs: 1300,
-                landingTimeoutMs: 1300,
-                stableMotionThreshold: 0.032,
-                minFlightForward: 0.009,
-                targetTrackRatio: 1.7,
-                targetGraceFrames: 8,
-                maxLowerBodyLossFrames: 8,
-                doubleTakeoffSyncRatio: 0.045
-            });
-        }
 
         const ISSUE_META = {
             not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站立 1 秒，再做完整预摆和起跳。' },
@@ -781,11 +644,6 @@
         const audioVolumeRange = document.getElementById('audio-volume-range');
         const titleChip = document.querySelector('.title-chip');
         const studentDock = document.querySelector('.student-dock');
-        const overlayAction = document.getElementById('overlay-action');
-        const studentNameModal = document.getElementById('student-name-modal');
-        const studentNameTitle = document.getElementById('student-name-title');
-        const studentNameHint = document.getElementById('student-name-hint');
-        const studentNameInput = document.getElementById('student-name-input');
         const audioState = {
             prefs: loadAudioPrefs(),
             ctx: null,
@@ -793,40 +651,12 @@
             lastGuidanceAt: 0,
             lastPraiseAt: 0
         };
-        const studentNameState = {
-            mode: 'add',
-            originalName: ''
-        };
-        const cameraState = {
-            stream: null,
-            pose: null,
-            running: false,
-            initializing: false,
-            poseSendFailed: false
-        };
         const PRAISE_LINES = [
             '这次节奏很好，继续保持。',
             '动作越来越连贯了。',
             '很好，继续做下一次。',
             '这次完成得不错，再来一组。'
         ];
-
-        video.autoplay = true;
-        video.muted = true;
-        video.playsInline = true;
-        video.setAttribute('playsinline', '');
-        video.setAttribute('webkit-playsinline', '');
-
-        studentNameInput.addEventListener('keydown', event => {
-            if (event.key === 'Enter') {
-                event.preventDefault();
-                submitStudentName();
-            } else if (event.key === 'Escape') {
-                closeStudentNameModal();
-            }
-        });
-
-        window.addEventListener('beforeunload', cleanupCamera);
 
         function normalizePracticeUi() {
             if (titleChip) titleChip.textContent = '立定跳远课堂版';
@@ -1003,88 +833,36 @@
 
         function closeStudentPanel() {
             studentPanel.classList.remove('is-open');
-            studentToggle.textContent = app.currentStudent;
+            studentToggle.textContent = '学生管理';
         }
 
         function toggleStudentPanel() {
             const isOpen = !studentPanel.classList.contains('is-open');
             studentPanel.classList.toggle('is-open', isOpen);
-            studentToggle.textContent = isOpen ? '收起管理' : app.currentStudent;
-        }
-
-        function openStudentNameModal(mode) {
-            studentNameState.mode = mode;
-            studentNameState.originalName = mode === 'rename' ? app.currentStudent : '';
-            studentNameTitle.textContent = mode === 'rename' ? '修改学生姓名' : '新增学生';
-            studentNameHint.textContent = mode === 'rename' ? `正在修改“${app.currentStudent}”的名字。` : '请输入学生姓名。手机端会直接在页面内输入，不再使用系统弹窗。';
-            studentNameInput.value = mode === 'rename' ? app.currentStudent : '';
-            studentNameModal.classList.add('is-open');
-            requestAnimationFrame(() => {
-                studentNameInput.focus();
-                studentNameInput.select();
-            });
-        }
-
-        function closeStudentNameModal() {
-            studentNameModal.classList.remove('is-open');
-        }
-
-        function handleStudentNameBackdrop(event) {
-            if (event.target === studentNameModal) closeStudentNameModal();
+            studentToggle.textContent = isOpen ? '收起管理' : '学生管理';
         }
 
         function addStudent() {
-            openStudentNameModal('add');
-        }
-
-        function renameStudent() {
-            openStudentNameModal('rename');
-        }
-
-        function submitStudentName() {
-            const trimmed = studentNameInput.value.trim();
-            if (!trimmed) {
-                studentNameHint.textContent = '姓名不能为空，请重新输入。';
-                studentNameInput.focus();
-                return;
-            }
-            if (studentNameState.mode === 'add') {
-                if (app.students[trimmed]) {
-                    studentNameHint.textContent = `“${trimmed}”已经存在，请换一个名字。`;
-                    studentNameInput.focus();
-                    studentNameInput.select();
-                    return;
-                }
-                app.students[trimmed] = [];
-                app.currentStudent = trimmed;
-            } else {
-                const oldName = studentNameState.originalName;
-                if (trimmed === oldName) {
-                    closeStudentNameModal();
-                    return;
-                }
-                if (app.students[trimmed]) {
-                    studentNameHint.textContent = `“${trimmed}”已经存在，请换一个名字。`;
-                    studentNameInput.focus();
-                    studentNameInput.select();
-                    return;
-                }
-                app.students[trimmed] = app.students[oldName];
-                delete app.students[oldName];
-                app.currentStudent = trimmed;
-            }
+            const name = prompt('请输入学生姓名');
+            if (!name) return;
+            const trimmed = name.trim();
+            if (!trimmed || app.students[trimmed]) return;
+            app.students[trimmed] = [];
+            app.currentStudent = trimmed;
             saveStudents();
             renderStudentOptions();
-            closeStudentNameModal();
             closeStudentPanel();
         }
 
-        function deleteStudent() {
-            const names = Object.keys(app.students);
-            if (names.length <= 1) return;
-            if (!confirm(`确定删除 ${app.currentStudent} 吗？`)) return;
-            delete app.students[app.currentStudent];
-            app.currentStudent = Object.keys(app.students)[0];
+        function renameStudent() {
+            const oldName = app.currentStudent;
+            const name = prompt('请输入新的学生姓名', oldName);
+            if (!name) return;
+            const trimmed = name.trim();
+            if (!trimmed || trimmed === oldName || app.students[trimmed]) return;
+            app.students[trimmed] = app.students[oldName];
+            delete app.students[oldName];
+            app.currentStudent = trimmed;
             saveStudents();
             renderStudentOptions();
             closeStudentPanel();
@@ -1165,17 +943,8 @@
             return point && typeof point.x === 'number' && typeof point.y === 'number' && (point.visibility == null || point.visibility >= JUMP_CONFIG.minVisibility);
         }
 
-        function toPoint(point) {
-            return point ? {
-                x: point.x,
-                y: point.y,
-                z: typeof point.z === 'number' ? point.z : 0
-            } : null;
-        }
-
         function allRequiredVisible(landmarks) {
-            const side = getVisibleSide(landmarks);
-            return SIDE_POINT_GROUPS[side].every(index => pointVisible(landmarks[index]));
+            return REQUIRED_POINTS.every(index => pointVisible(landmarks[index]));
         }
 
         function midpoint(a, b) {
@@ -1243,17 +1012,21 @@
                 29: 1.0, 30: 1.0,
                 31: 1.0, 32: 1.0
             };
+            const leftIndexes = [11, 15, 23, 25, 27, 29, 31];
+            const rightIndexes = [12, 16, 24, 26, 28, 30, 32];
             const score = (indexes) => indexes.reduce((sum, index) => {
                 const p = landmarks[index];
-                return sum + (pointVisible(p) ? (((p && p.visibility) || 0.6) * (weights[index] || 1)) : 0);
+                return sum + (((p && p.visibility) || 0) * (weights[index] || 1));
             }, 0);
-            const leftScore = score(SIDE_POINT_GROUPS.left);
-            const rightScore = score(SIDE_POINT_GROUPS.right);
+            const leftScore = score(leftIndexes);
+            const rightScore = score(rightIndexes);
             return leftScore >= rightScore ? 'left' : 'right';
         }
 
         function extractFeatures(landmarks) {
             if (!allRequiredVisible(landmarks)) return null;
+            const hipMid = midpoint(landmarks[23], landmarks[24]);
+            const shoulderMid = midpoint(landmarks[11], landmarks[12]);
             const side = getVisibleSide(landmarks);
             const useLeft = side === 'left';
             const hip = landmarks[useLeft ? 23 : 24];
@@ -1264,21 +1037,14 @@
             const shoulder = landmarks[useLeft ? 11 : 12];
             const wrist = landmarks[useLeft ? 15 : 16];
             const otherShoulder = landmarks[useLeft ? 12 : 11];
-            if (![hip, knee, ankle, heel, footIndex, shoulder, wrist].every(pointVisible)) return null;
-            const hipMid = pointVisible(landmarks[23]) && pointVisible(landmarks[24]) ? midpoint(landmarks[23], landmarks[24]) : toPoint(hip);
-            const shoulderMid = pointVisible(landmarks[11]) && pointVisible(landmarks[12]) ? midpoint(landmarks[11], landmarks[12]) : toPoint(shoulder);
-            if (!hipMid || !shoulderMid) return null;
             const torso = Math.max(distance(shoulderMid, hipMid), 0.001);
-            const shoulderWidth = pointVisible(landmarks[11]) && pointVisible(landmarks[12])
-                ? Math.max(distance(landmarks[11], landmarks[12]), 0.001)
-                : Math.max(distance(shoulder, hip) * 0.6, 0.001);
+            const shoulderWidth = Math.max(distance(landmarks[11], landmarks[12]), 0.001);
             const leftAnkle = landmarks[27];
             const rightAnkle = landmarks[28];
-            const bothAnklesVisible = pointVisible(leftAnkle) && pointVisible(rightAnkle);
-            const leftLift = bothAnklesVisible ? hipMid.y - leftAnkle.y : 0;
-            const rightLift = bothAnklesVisible ? hipMid.y - rightAnkle.y : 0;
-            const ankleAsync = bothAnklesVisible ? Math.abs(leftLift - rightLift) / torso : 0;
-            const ankleForwardAsync = bothAnklesVisible ? Math.abs(leftAnkle.x - rightAnkle.x) / torso : 0;
+            const leftLift = hipMid.y - leftAnkle.y;
+            const rightLift = hipMid.y - rightAnkle.y;
+            const ankleAsync = Math.abs(leftLift - rightLift) / torso;
+            const ankleForwardAsync = Math.abs(leftAnkle.x - rightAnkle.x) / torso;
             return {
                 hipMid,
                 ankle,
@@ -1292,11 +1058,11 @@
                 kneeAngle: getAngle(hip, knee, ankle),
                 hipAngle: getAngle(shoulder, hip, knee),
                 armLift: (shoulder.y - wrist.y) / torso,
-                wristBack: Math.abs(wrist.x - (pointVisible(otherShoulder) ? otherShoulder.x : shoulder.x)) / shoulderWidth,
+                wristBack: Math.abs(wrist.x - otherShoulder.x) / shoulderWidth,
                 heelLead: (heel.y - footIndex.y) / torso,
                 ankleAsync,
                 ankleForwardAsync,
-                lowerBodyVisible: SIDE_POINT_GROUPS[side].slice(2).every(index => pointVisible(landmarks[index]))
+                lowerBodyVisible: [23, 24, 25, 26, 27, 28, 29, 30, 31, 32].every(index => pointVisible(landmarks[index]))
             };
         }
 
@@ -1939,153 +1705,108 @@
             if (showIdleMessage) updateFeedback('本轮已结束', '可切换学生或点击开始分析，进入下一轮。', 'IDLE');
         }
 
-        function showOverlay(message, actionLabel = '') {
+        async function initCamera() {
             overlay.style.display = 'flex';
-            overlayText.textContent = message;
-            overlayAction.style.display = actionLabel ? 'inline-flex' : 'none';
-            if (actionLabel) overlayAction.textContent = actionLabel;
-        }
-
-        function hideOverlay() {
-            overlay.style.display = 'none';
-            overlayAction.style.display = 'none';
-        }
-
-        function cleanupCamera() {
-            cameraState.running = false;
-            if (cameraState.stream) {
-                cameraState.stream.getTracks().forEach(track => track.stop());
-                cameraState.stream = null;
+            overlayText.textContent = '正在打开摄像头并加载姿态识别，请允许摄像头权限。';
+            try {
+                const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+                pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                pose.onResults(onResults);
+                const camera = new Camera(video, {
+                    onFrame: async () => { await pose.send({ image: video }); },
+                    width: 640,
+                    height: 480
+                });
+                await camera.start();
+                resizeCanvas();
+                app.ready = true;
+                overlay.style.display = 'none';
+                updateFeedback('请侧身站立，保证全身入镜', '开始分析后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
+            } catch (error) {
+                console.error(error);
+                overlay.style.display = 'flex';
+                overlayText.textContent = `初始化失败：${String(error && error.message ? error.message : error)}`;
             }
-            if (cameraState.pose && typeof cameraState.pose.close === 'function') {
-                cameraState.pose.close();
+        }
+
+        function renderStudentOptions() {
+            ensureCurrentStudent();
+            studentSelect.innerHTML = '';
+            Object.keys(app.students).forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                studentSelect.appendChild(option);
+            });
+            studentSelect.value = app.currentStudent;
+            studentToggle.textContent = app.currentStudent;
+            renderHistory();
+        }
+
+        function closeStudentPanel() {
+            studentPanel.classList.remove('is-open');
+            studentToggle.textContent = app.currentStudent;
+        }
+
+        function toggleStudentPanel() {
+            const isOpen = !studentPanel.classList.contains('is-open');
+            studentPanel.classList.toggle('is-open', isOpen);
+            studentToggle.textContent = isOpen ? '收起管理' : app.currentStudent;
+        }
+
+        function deleteStudent() {
+            const names = Object.keys(app.students);
+            if (names.length <= 1) return;
+            if (!confirm(`确定删除 ${app.currentStudent} 吗？`)) return;
+            delete app.students[app.currentStudent];
+            app.currentStudent = Object.keys(app.students)[0];
+            saveStudents();
+            renderStudentOptions();
+            closeStudentPanel();
+        }
+
+        function renderHistory() {
+            historyList.innerHTML = '';
+            const records = app.students[app.currentStudent] || [];
+            if (records.length === 0) {
+                historyList.innerHTML = '<div class="history-item"><div class="result">当前学生还没有保存的练习记录。</div></div>';
+                return;
             }
-            cameraState.pose = null;
-            cameraState.poseSendFailed = false;
-            if (video.srcObject) video.srcObject = null;
-        }
-
-        function buildVideoConstraints(preferEnvironment) {
-            const constraints = {
-                audio: false,
-                video: {
-                    width: { ideal: IS_MOBILE ? 960 : 1280 },
-                    height: { ideal: IS_MOBILE ? 1280 : 720 },
-                    frameRate: { ideal: IS_MOBILE ? 24 : 30, max: 30 }
-                }
-            };
-            if (preferEnvironment) constraints.video.facingMode = { ideal: 'environment' };
-            return constraints;
-        }
-
-        async function openCameraStream() {
-            const attempts = [
-                buildVideoConstraints(IS_MOBILE),
-                buildVideoConstraints(false),
-                { audio: false, video: true }
-            ];
-            let lastError = null;
-            for (const constraints of attempts) {
-                try {
-                    return await navigator.mediaDevices.getUserMedia(constraints);
-                } catch (error) {
-                    lastError = error;
-                }
-            }
-            throw lastError || new Error('无法打开摄像头');
-        }
-
-        async function waitForVideoReady() {
-            if (video.readyState >= 2) return;
-            await new Promise((resolve, reject) => {
-                const done = () => {
-                    video.removeEventListener('loadeddata', onLoaded);
-                    video.removeEventListener('error', onError);
-                };
-                const onLoaded = () => {
-                    done();
-                    resolve();
-                };
-                const onError = () => {
-                    done();
-                    reject(new Error('视频流加载失败'));
-                };
-                video.addEventListener('loadeddata', onLoaded, { once: true });
-                video.addEventListener('error', onError, { once: true });
-                setTimeout(() => {
-                    done();
-                    resolve();
-                }, 1500);
+            [...records].reverse().forEach(record => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <div class="time">${record.time}</div>
+                    <div class="result">
+                        <strong>本轮练习 ${record.practiceCount || 0} 次</strong><br>
+                        主要指导：${record.topReasonsText || '本轮动作较完整'}<br>
+                        下一轮建议：${record.suggestion}
+                    </div>
+                `;
+                historyList.appendChild(div);
             });
         }
 
-        async function startPoseLoop() {
-            if (cameraState.running || !cameraState.pose) return;
-            cameraState.running = true;
-            const loop = async () => {
-                if (!cameraState.running || !cameraState.pose) return;
-                if (video.readyState >= 2) {
-                    try {
-                        await cameraState.pose.send({ image: video });
-                    } catch (error) {
-                        console.error('pose.send failed', error);
-                        cameraState.running = false;
-                        app.ready = false;
-                        showOverlay('当前浏览器的姿态识别执行失败。请重试，或切换到 Chrome / Safari。', '重新启动摄像头');
-                        return;
-                    }
-                }
-                requestAnimationFrame(loop);
-            };
-            requestAnimationFrame(loop);
+        function renderRoundSummary() {
+            if (!app.round) return;
+            roundSummary.innerHTML = `
+                <div class="summary-card"><strong>本轮结果</strong><p>本轮共练习 ${app.round.practiceCount} 次。</p></div>
+                <div class="summary-card"><strong>主要指导</strong><p>${buildTopReasonText(app.round.failReasons) || '本轮没有明显动作问题。'}</p></div>
+                <div class="summary-card"><strong>继续保持</strong><p>${buildTopReasonText(app.round.improvementReasons) || '整体动作较完整，继续保持预摆、蹬伸和落地缓冲节奏。'}</p></div>
+                <div class="summary-card"><strong>下一轮建议</strong><p>${pickSuggestion()}</p></div>
+            `;
         }
 
-        async function retryInitCamera() {
-            await initCamera(true);
-        }
-
-        async function initCamera(forceRestart = false) {
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                showOverlay('当前浏览器不支持摄像头访问，请换到较新的 Chrome、Safari 或 Edge。');
-                return;
-            }
-            if (cameraState.initializing) return;
-            cameraState.initializing = true;
-            if (forceRestart) cleanupCamera();
-            showOverlay(
-                IS_MOBILE
-                    ? '正在打开摄像头并加载姿态识别。手机端建议横屏放置，人与镜头拉开距离，并确保双脚完整入镜。'
-                    : '正在打开摄像头并加载姿态识别，请允许摄像头权限。'
-            );
-            try {
-                const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-                pose.setOptions({
-                    modelComplexity: IS_MOBILE ? 0 : 1,
-                    smoothLandmarks: true,
-                    minDetectionConfidence: IS_MOBILE ? 0.45 : 0.5,
-                    minTrackingConfidence: IS_MOBILE ? 0.45 : 0.5
-                });
-                pose.onResults(onResults);
-                const stream = await openCameraStream();
-                cleanupCamera();
-                cameraState.pose = pose;
-                cameraState.stream = stream;
-                video.srcObject = stream;
-                await video.play();
-                await waitForVideoReady();
-                resizeCanvas();
-                app.ready = true;
-                hideOverlay();
-                updateFeedback('请侧身站立，保证全身入镜', '开始分析后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
-                await startPoseLoop();
-            } catch (error) {
-                console.error(error);
-                cleanupCamera();
-                app.ready = false;
-                showOverlay(`初始化失败：${String(error && error.message ? error.message : error)}`, '重新启动摄像头');
-            } finally {
-                cameraState.initializing = false;
-            }
+        function saveRoundHistory() {
+            if (!app.round) return;
+            app.students[app.currentStudent].push({
+                time: new Date().toLocaleString(),
+                practiceCount: app.round.practiceCount,
+                topReasonsText: buildTopReasonText(app.round.failReasons) || buildTopReasonText(app.round.improvementReasons),
+                suggestion: pickSuggestion()
+            });
+            saveStudents();
+            renderHistory();
         }
 
         normalizePracticeUi();
