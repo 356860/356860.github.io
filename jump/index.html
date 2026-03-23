@@ -124,7 +124,7 @@
             position: absolute;
             top: 12px;
             left: 12px;
-            z-index: 11;
+            z-index: 16;
             display: inline-flex;
             align-items: center;
             gap: 10px;
@@ -149,6 +149,7 @@
             left: 0;
             width: min(320px, calc(100vw - 24px));
             padding: 10px;
+            z-index: 17;
             opacity: 0;
             pointer-events: none;
             transform: translateY(-6px);
@@ -265,7 +266,7 @@
             position: absolute;
             top: 12px;
             right: 12px;
-            z-index: 11;
+            z-index: 13;
             display: inline-flex;
             align-items: flex-end;
             flex-direction: column;
@@ -475,6 +476,7 @@
             text-align: center;
             padding: 24px;
             background: rgba(244, 247, 251, 0.92);
+            pointer-events: none;
         }
 
         .overlay-box {
@@ -484,6 +486,7 @@
             border-radius: 24px;
             padding: 24px;
             box-shadow: 0 14px 38px rgba(31, 41, 55, 0.12);
+            pointer-events: auto;
         }
 
         .overlay-title {
@@ -494,6 +497,18 @@
         }
 
         .overlay-text { color: var(--muted); line-height: 1.7; }
+
+        .overlay-action {
+            margin-top: 16px;
+            border: 1px solid transparent;
+            background: var(--primary);
+            color: #fff;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
 
         @media (max-width: 960px) {
             body { overflow: auto; }
@@ -560,6 +575,7 @@
                 <div class="overlay-box">
                     <div class="overlay-title">准备中</div>
                     <div class="overlay-text" id="overlay-text">正在打开摄像头并加载姿态识别，请保持网络稳定并允许摄像头权限。</div>
+                    <button id="overlay-action" class="overlay-action" style="display:none;" type="button" onclick="retryInitCamera()">重新启动摄像头</button>
                 </div>
             </div>
         </section>
@@ -729,6 +745,7 @@
         const ctx = canvas.getContext('2d');
         const overlay = document.getElementById('overlay');
         const overlayText = document.getElementById('overlay-text');
+        const overlayAction = document.getElementById('overlay-action');
         const phaseBadge = document.getElementById('phase-badge');
         const feedbackMain = document.getElementById('feedback-main');
         const feedbackSub = document.getElementById('feedback-sub');
@@ -751,6 +768,12 @@
         const studentDock = document.querySelector('.student-dock');
         const studentNameHint = document.getElementById('student-name-hint');
         const studentNameInput = document.getElementById('student-name-input');
+        const IS_MOBILE = window.matchMedia('(max-width: 960px), (pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+        const cameraState = {
+            pose: null,
+            camera: null,
+            frameFailed: false
+        };
         const audioState = {
             prefs: loadAudioPrefs(),
             ctx: null,
@@ -764,6 +787,12 @@
             '很好，继续做下一次。',
             '这次完成得不错，再来一组。'
         ];
+
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', '');
+        video.setAttribute('webkit-playsinline', '');
 
         studentNameInput.addEventListener('keydown', event => {
             if (event.key === 'Enter') {
@@ -1410,6 +1439,38 @@
             renderHistory();
         }
 
+        function showOverlay(message, actionLabel = '') {
+            overlay.style.display = 'flex';
+            overlayText.textContent = message;
+            overlayAction.style.display = actionLabel ? 'inline-flex' : 'none';
+            if (actionLabel) overlayAction.textContent = actionLabel;
+        }
+
+        function hideOverlay() {
+            overlay.style.display = 'none';
+            overlayAction.style.display = 'none';
+        }
+
+        function cleanupCamera() {
+            if (cameraState.camera && typeof cameraState.camera.stop === 'function') {
+                try { cameraState.camera.stop(); } catch (_) {}
+            }
+            if (video.srcObject && typeof video.srcObject.getTracks === 'function') {
+                video.srcObject.getTracks().forEach(track => track.stop());
+            }
+            if (cameraState.pose && typeof cameraState.pose.close === 'function') {
+                try { cameraState.pose.close(); } catch (_) {}
+            }
+            cameraState.pose = null;
+            cameraState.camera = null;
+            cameraState.frameFailed = false;
+            video.srcObject = null;
+        }
+
+        async function retryInitCamera() {
+            await initCamera(true);
+        }
+
         function beginAttempt() {
             app.attemptStartedAt = Date.now();
             app.attempt = {
@@ -1848,27 +1909,44 @@
             if (showIdleMessage) updateFeedback('本轮已结束', '可切换学生或点击开始分析，进入下一轮。', 'IDLE');
         }
 
-        async function initCamera() {
-            overlay.style.display = 'flex';
-            overlayText.textContent = '正在打开摄像头并加载姿态识别，请允许摄像头权限。';
+        async function initCamera(forceRestart = false) {
+            if (forceRestart) cleanupCamera();
+            showOverlay('正在打开摄像头并加载姿态识别，请允许摄像头权限。');
             try {
                 const pose = new Pose({ locateFile: file => `/mediapipe/pose/${file}` });
-                pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                pose.setOptions({
+                    modelComplexity: IS_MOBILE ? 0 : 1,
+                    smoothLandmarks: true,
+                    minDetectionConfidence: 0.5,
+                    minTrackingConfidence: 0.5
+                });
                 pose.onResults(onResults);
                 const camera = new Camera(video, {
-                    onFrame: async () => { await pose.send({ image: video }); },
-                    width: 640,
-                    height: 480
+                    onFrame: async () => {
+                        try {
+                            await pose.send({ image: video });
+                        } catch (error) {
+                            if (!cameraState.frameFailed) {
+                                cameraState.frameFailed = true;
+                                console.error('pose.send failed', error);
+                                showOverlay('摄像头已打开，但姿态识别没有正常运行。请点击重试；如果仍失败，优先使用夸克或 QQ 浏览器。', '重新启动摄像头');
+                            }
+                        }
+                    },
+                    width: IS_MOBILE ? 480 : 640,
+                    height: IS_MOBILE ? 640 : 480
                 });
+                cameraState.pose = pose;
+                cameraState.camera = camera;
                 await camera.start();
                 resizeCanvas();
                 app.ready = true;
-                overlay.style.display = 'none';
+                hideOverlay();
                 updateFeedback('请侧身站立，保证全身入镜', '开始分析后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
             } catch (error) {
                 console.error(error);
-                overlay.style.display = 'flex';
-                overlayText.textContent = `初始化失败：${String(error && error.message ? error.message : error)}`;
+                app.ready = false;
+                showOverlay(`初始化失败：${String(error && error.message ? error.message : error)}`, '重新启动摄像头');
             }
         }
 
@@ -1880,50 +1958,6 @@
             if (app.currentStudent === name) app.currentStudent = Object.keys(app.students)[0];
             saveStudents();
             renderStudentOptions();
-        }
-
-        function renderHistory() {
-            historyList.innerHTML = '';
-            const records = app.students[app.currentStudent] || [];
-            if (records.length === 0) {
-                historyList.innerHTML = '<div class="history-item"><div class="result">当前学生还没有保存的练习记录。</div></div>';
-                return;
-            }
-            [...records].reverse().forEach(record => {
-                const div = document.createElement('div');
-                div.className = 'history-item';
-                div.innerHTML = `
-                    <div class="time">${record.time}</div>
-                    <div class="result">
-                        <strong>本轮练习 ${record.practiceCount || 0} 次</strong><br>
-                        主要指导：${record.topReasonsText || '本轮动作较完整'}<br>
-                        下一轮建议：${record.suggestion}
-                    </div>
-                `;
-                historyList.appendChild(div);
-            });
-        }
-
-        function renderRoundSummary() {
-            if (!app.round) return;
-            roundSummary.innerHTML = `
-                <div class="summary-card"><strong>本轮结果</strong><p>本轮共练习 ${app.round.practiceCount} 次。</p></div>
-                <div class="summary-card"><strong>主要指导</strong><p>${buildTopReasonText(app.round.failReasons) || '本轮没有明显动作问题。'}</p></div>
-                <div class="summary-card"><strong>继续保持</strong><p>${buildTopReasonText(app.round.improvementReasons) || '整体动作较完整，继续保持预摆、蹬伸和落地缓冲节奏。'}</p></div>
-                <div class="summary-card"><strong>下一轮建议</strong><p>${pickSuggestion()}</p></div>
-            `;
-        }
-
-        function saveRoundHistory() {
-            if (!app.round) return;
-            app.students[app.currentStudent].push({
-                time: new Date().toLocaleString(),
-                practiceCount: app.round.practiceCount,
-                topReasonsText: buildTopReasonText(app.round.failReasons) || buildTopReasonText(app.round.improvementReasons),
-                suggestion: pickSuggestion()
-            });
-            saveStudents();
-            renderHistory();
         }
 
         normalizePracticeUi();
