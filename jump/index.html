@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>立定跳远课堂分析 - 阶段状态机优化版</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="/mediapipe/pose/pose.js"></script>
+    <script src="/mediapipe/camera_utils/camera_utils.js"></script>
     <style>
         :root {
             --bg: #f4f7fb;
@@ -395,6 +395,83 @@
 
         .overlay-text { color: var(--muted); line-height: 1.7; }
 
+        .name-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 40;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(15, 23, 42, 0.36);
+            backdrop-filter: blur(6px);
+        }
+
+        .name-modal.is-open {
+            display: flex;
+        }
+
+        .name-dialog {
+            width: min(400px, calc(100vw - 24px));
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow: 0 18px 44px rgba(15, 23, 42, 0.18);
+        }
+
+        .name-dialog h3 {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .name-dialog p {
+            margin: 10px 0 0;
+            color: var(--muted);
+            line-height: 1.7;
+            font-size: 14px;
+        }
+
+        .name-dialog input {
+            width: 100%;
+            margin-top: 16px;
+            border: 1px solid var(--line);
+            border-radius: 14px;
+            padding: 14px 16px;
+            font-size: 16px;
+            outline: none;
+        }
+
+        .name-dialog input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(36, 107, 255, 0.12);
+        }
+
+        .name-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .name-actions button {
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--text);
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .name-actions .primary {
+            border-color: transparent;
+            background: var(--primary);
+            color: #fff;
+        }
+
         @media (max-width: 960px) {
             body { overflow: auto; }
             .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
@@ -504,6 +581,18 @@
                 <div class="history" id="history-list"></div>
             </section>
         </aside>
+    </div>
+
+    <div id="student-name-modal" class="name-modal" onclick="handleStudentNameBackdrop(event)">
+        <div class="name-dialog" role="dialog" aria-modal="true" aria-labelledby="student-name-title">
+            <h3 id="student-name-title">新增学生</h3>
+            <p id="student-name-hint">请输入学生姓名。</p>
+            <input id="student-name-input" type="text" maxlength="20" autocomplete="off" placeholder="例如：张三">
+            <div class="name-actions">
+                <button type="button" onclick="closeStudentNameModal()">取消</button>
+                <button type="button" class="primary" onclick="submitStudentName()">确定</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -644,6 +733,11 @@
         const audioVolumeRange = document.getElementById('audio-volume-range');
         const titleChip = document.querySelector('.title-chip');
         const studentDock = document.querySelector('.student-dock');
+        const studentNameModal = document.getElementById('student-name-modal');
+        const studentNameTitle = document.getElementById('student-name-title');
+        const studentNameHint = document.getElementById('student-name-hint');
+        const studentNameInput = document.getElementById('student-name-input');
+        const studentNameState = { mode: 'add', originalName: '' };
         const audioState = {
             prefs: loadAudioPrefs(),
             ctx: null,
@@ -657,6 +751,15 @@
             '很好，继续做下一次。',
             '这次完成得不错，再来一组。'
         ];
+
+        studentNameInput.addEventListener('keydown', event => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                submitStudentName();
+            } else if (event.key === 'Escape') {
+                closeStudentNameModal();
+            }
+        });
 
         function normalizePracticeUi() {
             if (titleChip) titleChip.textContent = '立定跳远课堂版';
@@ -842,30 +945,71 @@
             studentToggle.textContent = isOpen ? '收起管理' : '学生管理';
         }
 
+        function openStudentNameModal(mode) {
+            studentNameState.mode = mode;
+            studentNameState.originalName = mode === 'rename' ? app.currentStudent : '';
+            studentNameTitle.textContent = mode === 'rename' ? '修改学生姓名' : '新增学生';
+            studentNameHint.textContent = mode === 'rename' ? `正在修改“${app.currentStudent}”的名字。` : '请输入学生姓名。';
+            studentNameInput.value = mode === 'rename' ? app.currentStudent : '';
+            studentNameModal.classList.add('is-open');
+            requestAnimationFrame(() => {
+                studentNameInput.focus();
+                studentNameInput.select();
+            });
+        }
+
+        function closeStudentNameModal() {
+            studentNameModal.classList.remove('is-open');
+        }
+
+        function handleStudentNameBackdrop(event) {
+            if (event.target === studentNameModal) closeStudentNameModal();
+        }
+
         function addStudent() {
-            const name = prompt('请输入学生姓名');
-            if (!name) return;
-            const trimmed = name.trim();
-            if (!trimmed || app.students[trimmed]) return;
-            app.students[trimmed] = [];
-            app.currentStudent = trimmed;
+            openStudentNameModal('add');
+        }
+
+        function submitStudentName() {
+            const trimmed = studentNameInput.value.trim();
+            if (!trimmed) {
+                studentNameHint.textContent = '姓名不能为空，请重新输入。';
+                studentNameInput.focus();
+                return;
+            }
+            if (studentNameState.mode === 'add') {
+                if (app.students[trimmed]) {
+                    studentNameHint.textContent = `“${trimmed}”已经存在，请换一个名字。`;
+                    studentNameInput.focus();
+                    studentNameInput.select();
+                    return;
+                }
+                app.students[trimmed] = [];
+                app.currentStudent = trimmed;
+            } else {
+                const oldName = studentNameState.originalName;
+                if (trimmed === oldName) {
+                    closeStudentNameModal();
+                    return;
+                }
+                if (app.students[trimmed]) {
+                    studentNameHint.textContent = `“${trimmed}”已经存在，请换一个名字。`;
+                    studentNameInput.focus();
+                    studentNameInput.select();
+                    return;
+                }
+                app.students[trimmed] = app.students[oldName];
+                delete app.students[oldName];
+                app.currentStudent = trimmed;
+            }
             saveStudents();
             renderStudentOptions();
+            closeStudentNameModal();
             closeStudentPanel();
         }
 
         function renameStudent() {
-            const oldName = app.currentStudent;
-            const name = prompt('请输入新的学生姓名', oldName);
-            if (!name) return;
-            const trimmed = name.trim();
-            if (!trimmed || trimmed === oldName || app.students[trimmed]) return;
-            app.students[trimmed] = app.students[oldName];
-            delete app.students[oldName];
-            app.currentStudent = trimmed;
-            saveStudents();
-            renderStudentOptions();
-            closeStudentPanel();
+            openStudentNameModal('rename');
         }
 
         function changeStudent() {
@@ -1709,7 +1853,7 @@
             overlay.style.display = 'flex';
             overlayText.textContent = '正在打开摄像头并加载姿态识别，请允许摄像头权限。';
             try {
-                const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+                const pose = new Pose({ locateFile: file => `/mediapipe/pose/${file}` });
                 pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
                 pose.onResults(onResults);
                 const camera = new Camera(video, {
