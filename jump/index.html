@@ -1302,6 +1302,9 @@
                 <div class="overlay-box">
                     <div class="overlay-title">准备中</div>
                     <div class="overlay-text" id="overlay-text">正在打开摄像头并加载姿态识别，请保持网络稳定并允许摄像头权限。</div>
+                    <div class="student-editor-actions" style="justify-content:center; margin-top:16px;">
+                        <button id="retry-camera-btn" class="primary" type="button" onclick="initCamera()" style="display:none;">重新启动摄像头</button>
+                    </div>
                 </div>
             </div>
 
@@ -1476,7 +1479,10 @@
             smoothFeatures: null,
             confirmFrames: { takeoff: 0, flight: 0, landing: 0 },
             drillPhase: 'IDLE',
-            drillFrames: 0
+            drillFrames: 0,
+            cameraStream: null,
+            pose: null,
+            frameLoopToken: 0
         };
 
         const video = document.getElementById('video-layer');
@@ -1485,6 +1491,7 @@
         const ctx = canvas.getContext('2d');
         const overlay = document.getElementById('overlay');
         const overlayText = document.getElementById('overlay-text');
+        const retryCameraBtn = document.getElementById('retry-camera-btn');
         const feedbackStage = document.getElementById('feedback-stage');
         const phaseBadge = document.getElementById('phase-badge');
         const feedbackMain = document.getElementById('feedback-main');
@@ -1721,6 +1728,42 @@
             stageStartBtn.textContent = training ? '暂停训练' : '开始训练';
             stageStartBtn.className = training ? 'danger' : 'primary';
             stageFinishBtn.disabled = !training;
+        }
+
+        function stopCameraSession() {
+            app.frameLoopToken += 1;
+            if (app.cameraStream) {
+                app.cameraStream.getTracks().forEach(track => track.stop());
+                app.cameraStream = null;
+            }
+            video.srcObject = null;
+            app.ready = false;
+            syncTrainingButtons();
+        }
+
+        function getCameraErrorMessage(error) {
+            const name = error && error.name ? error.name : '';
+            if (name === 'NotReadableError') return '摄像头当前被其他程序或浏览器标签页占用，请先关闭其他正在使用摄像头的应用后重试。';
+            if (name === 'NotAllowedError') return '你拒绝了摄像头权限，请在浏览器地址栏重新允许摄像头访问。';
+            if (name === 'NotFoundError') return '没有检测到可用摄像头，请检查设备摄像头是否可用。';
+            if (name === 'OverconstrainedError') return '当前摄像头不支持请求的视频规格，我会建议你刷新后重试。';
+            return `初始化失败：${String(error && error.message ? error.message : error)}`;
+        }
+
+        function startPoseLoop() {
+            const token = ++app.frameLoopToken;
+            const tick = async () => {
+                if (token !== app.frameLoopToken || !app.cameraStream || !app.pose) return;
+                if (video.readyState >= 2) {
+                    try {
+                        await app.pose.send({ image: video });
+                    } catch (error) {
+                        console.error('pose frame failed', error);
+                    }
+                }
+                requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
         }
 
         function updateAudioPrefs() {
@@ -2716,25 +2759,39 @@
         async function initCamera() {
             overlay.style.display = 'flex';
             overlayText.textContent = '正在打开摄像头并加载姿态识别，请允许摄像头权限。';
+            retryCameraBtn.style.display = 'none';
+            stopCameraSession();
             try {
-                const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-                pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
-                pose.onResults(onResults);
-                const camera = new Camera(video, {
-                    onFrame: async () => { await pose.send({ image: video }); },
-                    width: 640,
-                    height: 480
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('当前浏览器不支持摄像头访问');
+                }
+                if (!app.pose) {
+                    app.pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+                    app.pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+                    app.pose.onResults(onResults);
+                }
+                app.cameraStream = await navigator.mediaDevices.getUserMedia({
+                    audio: false,
+                    video: {
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 },
+                        facingMode: 'user'
+                    }
                 });
-                await camera.start();
+                video.srcObject = app.cameraStream;
+                await video.play();
                 resizeCanvas();
+                startPoseLoop();
                 app.ready = true;
+                syncTrainingButtons();
                 overlay.style.display = 'none';
                 hideFramingPrompt();
                 updateFeedback('请侧身站立，保证全身入镜', '开始分析后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
             } catch (error) {
                 console.error(error);
                 overlay.style.display = 'flex';
-                overlayText.textContent = `初始化失败：${String(error && error.message ? error.message : error)}`;
+                overlayText.textContent = getCameraErrorMessage(error);
+                retryCameraBtn.style.display = 'inline-flex';
             }
         }
 
