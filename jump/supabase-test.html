@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase 成绩上传测试</title>
+    <style>
+        :root {
+            --bg: #eff3f8;
+            --card: rgba(255, 255, 255, 0.88);
+            --line: rgba(15, 23, 42, 0.08);
+            --text: #0f172a;
+            --muted: #475569;
+            --primary: #0f766e;
+            --danger: #be123c;
+            --success: #047857;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            padding: 24px;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(15, 118, 110, 0.12), transparent 28%),
+                linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+        }
+
+        .wrap {
+            width: min(880px, 100%);
+            margin: 0 auto;
+            display: grid;
+            gap: 18px;
+        }
+
+        .card {
+            padding: 20px;
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            background: var(--card);
+            backdrop-filter: blur(18px);
+            box-shadow: 0 16px 48px rgba(15, 23, 42, 0.08);
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 28px;
+        }
+
+        p, li {
+            color: var(--muted);
+            line-height: 1.7;
+        }
+
+        .meta {
+            display: grid;
+            gap: 6px;
+            font-size: 14px;
+        }
+
+        .meta code,
+        pre,
+        .status {
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+        }
+
+        form {
+            display: grid;
+            gap: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        label {
+            display: grid;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            border-radius: 14px;
+            padding: 12px 14px;
+            font: inherit;
+            color: var(--text);
+            background: rgba(255, 255, 255, 0.92);
+            outline: none;
+        }
+
+        textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: rgba(15, 118, 110, 0.45);
+            box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            border: 0;
+            border-radius: 999px;
+            padding: 12px 18px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .primary {
+            background: var(--primary);
+            color: #fff;
+        }
+
+        .secondary {
+            background: rgba(15, 23, 42, 0.08);
+            color: var(--text);
+        }
+
+        .status {
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: rgba(15, 23, 42, 0.04);
+            color: var(--muted);
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .status.success {
+            background: rgba(4, 120, 87, 0.1);
+            color: var(--success);
+        }
+
+        .status.error {
+            background: rgba(190, 18, 60, 0.08);
+            color: var(--danger);
+        }
+
+        pre {
+            margin: 0;
+            overflow: auto;
+            padding: 14px 16px;
+            border-radius: 16px;
+            background: #0f172a;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 720px) {
+            body { padding: 14px; }
+            .grid { grid-template-columns: 1fr; }
+            .card { padding: 16px; border-radius: 18px; }
+            h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <section class="card">
+            <h1>Supabase 成绩上传测试</h1>
+            <p>这个页面用来验证你的网页能不能直接把一条成绩上传到 Supabase。先只做测试表，不影响正式页面。</p>
+            <div class="meta">
+                <div>Project URL: <code id="project-url"></code></div>
+                <div>Target Table: <code>public.jump_records_test</code></div>
+                <div>说明: 如果提示表不存在或权限不足，需要先在 Supabase SQL Editor 执行下面的建表 SQL。</div>
+            </div>
+        </section>
+
+        <section class="card">
+            <form id="test-form">
+                <div class="grid">
+                    <label>
+                        学生姓名
+                        <input id="student-name" type="text" value="测试学生A" required>
+                    </label>
+                    <label>
+                        小组名称
+                        <input id="group-name" type="text" value="三年级一组">
+                    </label>
+                </div>
+                <div class="grid">
+                    <label>
+                        成功次数
+                        <input id="success-count" type="number" min="0" step="1" value="3" required>
+                    </label>
+                    <label>
+                        失败次数
+                        <input id="failed-count" type="number" min="0" step="1" value="1" required>
+                    </label>
+                </div>
+                <label>
+                    主要问题
+                    <textarea id="top-reasons-text">摆臂不足，落地缓冲不够。</textarea>
+                </label>
+                <label>
+                    建议
+                    <textarea id="suggestion">下一轮重点加强预摆和收腹。</textarea>
+                </label>
+                <div class="actions">
+                    <button type="submit" class="primary">上传一条测试记录</button>
+                    <button type="button" id="copy-sql-btn" class="secondary">复制建表 SQL</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="card">
+            <div id="status" class="status">等待测试。</div>
+        </section>
+
+        <section class="card">
+            <p>如果上传失败，请把下面的 SQL 粘贴到 Supabase 的 SQL Editor 里执行一次：</p>
+            <pre id="sql-block"></pre>
+        </section>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://dmssegbmfnngjgiaqgv.supabase.co';
+        const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_n-sRBVrmElw3Lv0HU5e6uQ_rSfgklXe';
+        const TABLE_NAME = 'jump_records_test';
+
+        const sqlText = `create table if not exists public.jump_records_test (
+  id bigint generated always as identity primary key,
+  record_id text not null unique,
+  student_name text not null,
+  group_name text,
+  success_count integer not null default 0,
+  failed_count integer not null default 0,
+  top_reasons_text text,
+  suggestion text,
+  created_at timestamptz not null default now()
+);
+
+alter table public.jump_records_test enable row level security;
+
+drop policy if exists "allow anon insert jump_records_test" on public.jump_records_test;
+create policy "allow anon insert jump_records_test"
+on public.jump_records_test
+for insert
+to anon
+with check (true);
+
+drop policy if exists "allow anon select jump_records_test" on public.jump_records_test;
+create policy "allow anon select jump_records_test"
+on public.jump_records_test
+for select
+to anon
+using (true);`;
+
+        const statusEl = document.getElementById('status');
+        const sqlBlock = document.getElementById('sql-block');
+        const projectUrlEl = document.getElementById('project-url');
+        const form = document.getElementById('test-form');
+
+        projectUrlEl.textContent = SUPABASE_URL;
+        sqlBlock.textContent = sqlText;
+
+        function setStatus(message, type = '') {
+            statusEl.className = `status${type ? ` ${type}` : ''}`;
+            statusEl.textContent = message;
+        }
+
+        function getFormRecord() {
+            return {
+                record_id: `test_${Date.now()}`,
+                student_name: document.getElementById('student-name').value.trim(),
+                group_name: document.getElementById('group-name').value.trim(),
+                success_count: Number(document.getElementById('success-count').value || 0),
+                failed_count: Number(document.getElementById('failed-count').value || 0),
+                top_reasons_text: document.getElementById('top-reasons-text').value.trim(),
+                suggestion: document.getElementById('suggestion').value.trim()
+            };
+        }
+
+        async function insertTestRecord(event) {
+            event.preventDefault();
+            const payload = getFormRecord();
+            if (!payload.student_name) {
+                setStatus('学生姓名不能为空。', 'error');
+                return;
+            }
+
+            setStatus('正在上传测试记录...');
+
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE_NAME}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_PUBLISHABLE_KEY,
+                        'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+                        'Prefer': 'return=representation'
+                    },
+                    body: JSON.stringify([payload])
+                });
+
+                const raw = await response.text();
+                let parsed = null;
+                try {
+                    parsed = raw ? JSON.parse(raw) : null;
+                } catch (error) {
+                    parsed = raw;
+                }
+
+                if (!response.ok) {
+                    const hint =
+                        response.status === 404 ? '\n提示：通常是测试表还没创建。请先执行下面的 SQL。' :
+                        response.status === 401 || response.status === 403 ? '\n提示：通常是 RLS 策略还没放行插入。' :
+                        '';
+                    setStatus(`上传失败\nHTTP ${response.status}\n${typeof parsed === 'string' ? parsed : JSON.stringify(parsed, null, 2)}${hint}`, 'error');
+                    return;
+                }
+
+                setStatus(`上传成功\n${JSON.stringify(parsed, null, 2)}`, 'success');
+            } catch (error) {
+                setStatus(`请求失败\n${error.message}`, 'error');
+            }
+        }
+
+        async function copySql() {
+            try {
+                await navigator.clipboard.writeText(sqlText);
+                setStatus('建表 SQL 已复制。到 Supabase 的 SQL Editor 里直接粘贴运行。', 'success');
+            } catch (error) {
+                setStatus(`复制失败，请手动复制下方 SQL。\n${error.message}`, 'error');
+            }
+        }
+
+        form.addEventListener('submit', insertTestRecord);
+        document.getElementById('copy-sql-btn').addEventListener('click', copySql);
+    </script>
+</body>
+</html>
