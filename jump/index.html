@@ -578,10 +578,548 @@
 
         .overlay-text { color: var(--muted); line-height: 1.7; }
 
+        .app {
+            position: relative;
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            padding: 0;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top left, rgba(50, 120, 255, 0.16), transparent 28%),
+                radial-gradient(circle at right, rgba(255, 255, 255, 0.08), transparent 24%),
+                linear-gradient(180deg, #081321 0%, #0b1c34 55%, #091624 100%);
+        }
+
+        .stage {
+            width: 100%;
+            height: 100%;
+            min-height: 100vh;
+            border-radius: 0;
+            border: 0;
+            background:
+                radial-gradient(circle at 50% 16%, rgba(103, 188, 255, 0.1), transparent 22%),
+                radial-gradient(circle at 80% 50%, rgba(98, 119, 255, 0.08), transparent 28%),
+                linear-gradient(180deg, rgba(9, 20, 37, 0.96) 0%, rgba(8, 18, 34, 0.98) 100%);
+        }
+
+        .stage::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 14%, transparent 82%, rgba(255, 255, 255, 0.04));
+            pointer-events: none;
+        }
+
+        .glass-panel {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 28px 60px rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(20px);
+        }
+
+        #video-layer,
+        #draw-layer {
+            inset: 2.5% 11.5% 9%;
+            width: 77%;
+            height: 79%;
+            border-radius: 36px;
+        }
+
+        #draw-layer {
+            z-index: 2;
+        }
+
+        .student-dock,
+        .counter-dock,
+        .teacher-dock,
+        .feedback-stage,
+        .summary-stage {
+            z-index: 18;
+        }
+
+        .student-dock {
+            top: 22px;
+            left: 22px;
+        }
+
+        .student-toggle {
+            position: relative;
+            min-width: 144px;
+            padding: 14px 18px 14px 36px;
+            border-color: rgba(255, 255, 255, 0.12);
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.08));
+            color: #f8fbff;
+            font-size: 24px;
+            font-weight: 800;
+            box-shadow: 0 18px 38px rgba(0, 0, 0, 0.24);
+        }
+
+        .student-toggle::before {
+            content: '';
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4ade80;
+            box-shadow: 0 0 18px rgba(74, 222, 128, 0.72);
+            transform: translateY(-50%);
+        }
+
+        .student-panel {
+            top: calc(100% + 12px);
+            width: min(340px, calc(100vw - 32px));
+            padding: 12px;
+            border-radius: 20px;
+            background: rgba(10, 18, 32, 0.9);
+            border-color: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(22px);
+        }
+
+        .counter-dock {
+            position: absolute;
+            top: 22px;
+            right: 22px;
+            width: 118px;
+            padding: 16px 16px 14px;
+            border-radius: 28px;
+            text-align: right;
+        }
+
+        .counter-kicker {
+            font-size: 13px;
+            font-weight: 700;
+            color: rgba(223, 232, 255, 0.76);
+            letter-spacing: 1px;
+        }
+
+        .counter-value {
+            font-size: 76px;
+            font-weight: 800;
+            line-height: 0.9;
+            color: rgba(247, 250, 255, 0.96);
+            text-shadow: 0 8px 30px rgba(255, 255, 255, 0.14);
+        }
+
+        .teacher-dock {
+            position: absolute;
+            right: 22px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .teacher-toggle-btn {
+            width: 54px;
+            height: 54px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(7, 17, 31, 0.42);
+            color: #f3f6ff;
+            font-size: 28px;
+            cursor: pointer;
+            backdrop-filter: blur(16px);
+            box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
+        }
+
+        .feedback-stage {
+            position: absolute;
+            left: 50%;
+            bottom: 42px;
+            width: min(820px, calc(100vw - 280px));
+            padding: 22px 26px 24px;
+            border-radius: 30px;
+            transform: translateX(-50%);
+            text-align: center;
+        }
+
+        .phase-badge {
+            justify-self: center;
+            margin-bottom: 14px;
+            padding: 8px 14px;
+            background: rgba(255, 255, 255, 0.14);
+            color: rgba(243, 246, 255, 0.92);
+        }
+
+        .feedback-box {
+            margin-top: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+        }
+
+        .feedback-title {
+            margin-bottom: 12px;
+            font-size: clamp(34px, 4vw, 56px);
+            line-height: 1.08;
+            font-weight: 900;
+            color: #f6f9ff;
+            text-shadow: 0 14px 30px rgba(0, 0, 0, 0.28);
+        }
+
+        .feedback-sub {
+            max-width: 560px;
+            margin: 0 auto;
+            font-size: 18px;
+            color: rgba(219, 229, 245, 0.84);
+        }
+
+        .summary-stage {
+            position: absolute;
+            left: 50%;
+            bottom: 44px;
+            width: min(860px, calc(100vw - 220px));
+            padding: 24px;
+            border-radius: 30px;
+            opacity: 0;
+            pointer-events: none;
+            transform: translate(-50%, 24px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+        }
+
+        .summary-stage.is-visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, 0);
+        }
+
+        .summary-stage-title {
+            margin-bottom: 14px;
+            font-size: 22px;
+            font-weight: 800;
+            color: #f8fbff;
+        }
+
+        .summary-stage .summary {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .summary-stage .summary-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.08);
+            color: #e7eefc;
+        }
+
+        .summary-stage .summary-card strong {
+            color: #f8fbff;
+        }
+
+        .summary-stage .summary-card p {
+            color: rgba(223, 232, 245, 0.84);
+        }
+
+        .summary-stage-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .teacher-backdrop {
+            position: absolute;
+            inset: 0;
+            z-index: 26;
+            opacity: 0;
+            pointer-events: none;
+            background: rgba(4, 9, 19, 0.4);
+            transition: opacity 0.18s ease;
+        }
+
+        .teacher-backdrop.is-open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 18px;
+            right: 18px;
+            bottom: 18px;
+            width: min(380px, calc(100vw - 36px));
+            padding: 18px;
+            border-radius: 30px;
+            background: rgba(10, 19, 34, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            box-shadow: 0 26px 60px rgba(0, 0, 0, 0.34);
+            backdrop-filter: blur(22px);
+            overflow: auto;
+            z-index: 30;
+            transform: translateX(calc(100% + 28px));
+            transition: transform 0.22s ease;
+        }
+
+        .sidebar.is-open {
+            transform: translateX(0);
+        }
+
+        .drawer-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+            margin-bottom: 14px;
+        }
+
+        .drawer-title {
+            font-size: 28px;
+            font-weight: 900;
+            color: #f8fbff;
+        }
+
+        .drawer-subtitle {
+            margin-top: 6px;
+            font-size: 14px;
+            line-height: 1.6;
+            color: rgba(204, 216, 236, 0.72);
+        }
+
+        .drawer-close {
+            width: 40px;
+            height: 40px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .drawer-panel {
+            padding: 16px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 22px;
+        }
+
+        .drawer-panel h3 {
+            color: #f8fbff;
+        }
+
+        .muted {
+            color: rgba(204, 216, 236, 0.74);
+        }
+
+        .mode-panel select,
+        .meta-field input,
+        .drawer-action-grid button,
+        .summary-stage-actions button {
+            border-color: rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.08);
+            color: #edf3ff;
+        }
+
+        .mode-panel select,
+        .meta-field input {
+            backdrop-filter: blur(10px);
+        }
+
+        .meta-field label {
+            color: rgba(218, 228, 244, 0.76);
+        }
+
+        .meta-field input:focus,
+        .mode-panel select:focus {
+            border-color: rgba(89, 164, 255, 0.56);
+            box-shadow: 0 0 0 4px rgba(89, 164, 255, 0.14);
+        }
+
+        .drill-item,
+        .history-item,
+        .summary-card {
+            background: rgba(255, 255, 255, 0.07);
+            border-color: rgba(255, 255, 255, 0.08);
+        }
+
+        .drill-item span,
+        .history-item .time,
+        .history-item .result,
+        .summary-card p {
+            color: rgba(219, 227, 240, 0.82);
+        }
+
+        .summary-card strong,
+        .drill-item strong {
+            color: #f8fbff;
+        }
+
+        .history-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 220px;
+        }
+
+        .history {
+            flex: 1;
+            max-height: 34vh;
+        }
+
+        .drawer-section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .drawer-action-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .drawer-action-grid .primary,
+        .summary-stage-actions .primary {
+            background: linear-gradient(180deg, rgba(82, 150, 255, 0.98), rgba(36, 107, 255, 0.96));
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .sound-toggle {
+            padding: 10px 14px;
+            border-radius: 999px;
+            font-size: 13px;
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .drawer-sound-panel {
+            width: 100%;
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            display: none;
+        }
+
+        .drawer-sound-panel.is-open {
+            display: grid;
+        }
+
+        .sound-row label,
+        .sound-volume label {
+            color: rgba(237, 243, 255, 0.82);
+        }
+
+        .sync-status {
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(223, 233, 248, 0.84);
+        }
+
+        .sync-status.is-success {
+            background: rgba(32, 133, 90, 0.18);
+            color: #9ef0bc;
+        }
+
+        .sync-status.is-warning {
+            background: rgba(182, 135, 42, 0.18);
+            color: #ffd781;
+        }
+
+        .sync-status.is-error {
+            background: rgba(171, 76, 76, 0.18);
+            color: #ffc3c3;
+        }
+
+        .overlay {
+            z-index: 40;
+            background: rgba(6, 12, 22, 0.68);
+            backdrop-filter: blur(16px);
+        }
+
+        .overlay-box {
+            background: rgba(10, 18, 32, 0.82);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .overlay-title {
+            color: #f6f9ff;
+        }
+
+        .overlay-text {
+            color: rgba(221, 230, 244, 0.82);
+        }
+
         @media (max-width: 960px) {
-            body { overflow: auto; }
-            .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
-            .stage { min-height: 54vh; }
+            body { overflow: hidden; }
+            #video-layer,
+            #draw-layer {
+                inset: 70px 12px 160px;
+                width: calc(100% - 24px);
+                height: calc(100% - 230px);
+                border-radius: 28px;
+            }
+            .counter-dock {
+                top: 14px;
+                right: 14px;
+                width: 94px;
+                padding: 12px 12px 10px;
+                border-radius: 24px;
+            }
+            .counter-value {
+                font-size: 58px;
+            }
+            .student-dock {
+                top: 14px;
+                left: 14px;
+            }
+            .student-toggle {
+                min-width: 118px;
+                padding: 12px 14px 12px 30px;
+                font-size: 16px;
+            }
+            .student-toggle::before {
+                left: 12px;
+                width: 8px;
+                height: 8px;
+            }
+            .teacher-dock {
+                right: 16px;
+                top: auto;
+                bottom: 188px;
+                transform: none;
+            }
+            .teacher-toggle-btn {
+                width: 50px;
+                height: 50px;
+                border-radius: 16px;
+                font-size: 24px;
+            }
+            .feedback-stage,
+            .summary-stage {
+                width: calc(100vw - 24px);
+                left: 12px;
+                bottom: 14px;
+                transform: none;
+                padding: 18px 18px 20px;
+            }
+            .summary-stage {
+                transform: translateY(24px);
+            }
+            .summary-stage.is-visible {
+                transform: translateY(0);
+            }
+            .feedback-title {
+                font-size: 34px;
+            }
+            .feedback-sub {
+                font-size: 15px;
+            }
+            .sidebar {
+                top: auto;
+                right: 0;
+                left: 0;
+                bottom: 0;
+                width: 100%;
+                max-height: 80vh;
+                border-radius: 28px 28px 0 0;
+                transform: translateY(calc(100% + 20px));
+            }
+            .sidebar.is-open {
+                transform: translateY(0);
+            }
+            .drawer-action-grid,
+            .summary-stage .summary,
             .meta-grid { grid-template-columns: 1fr; }
         }
     </style>
@@ -592,8 +1130,9 @@
             <video id="video-layer" playsinline></video>
             <canvas id="draw-layer"></canvas>
 
-            <div class="top-bar">
-                <div class="title-chip">立定跳远课堂版</div>
+            <div class="counter-dock glass-panel">
+                <div class="counter-kicker">练习次数</div>
+                <div class="counter-value" id="practice-count">0</div>
             </div>
 
             <div class="student-dock">
@@ -610,35 +1149,31 @@
                 </div>
             </div>
 
-            <div class="sound-dock">
-                <button id="sound-toggle" class="sound-toggle" onclick="toggleSoundPanel()">声音提示</button>
-                <div id="sound-panel" class="panel sound-panel">
-                    <div class="sound-row">
-                        <label for="sound-effects-toggle">音效</label>
-                        <input id="sound-effects-toggle" type="checkbox" onchange="updateAudioPrefs()">
-                    </div>
-                    <div class="sound-row">
-                        <label for="voice-guidance-toggle">语音提醒</label>
-                        <input id="voice-guidance-toggle" type="checkbox" onchange="updateAudioPrefs()">
-                    </div>
-                    <div class="sound-row">
-                        <label for="voice-praise-toggle">鼓励语音</label>
-                        <input id="voice-praise-toggle" type="checkbox" onchange="updateAudioPrefs()">
-                    </div>
-                    <div class="sound-volume">
-                        <label for="audio-volume-range">音量</label>
-                        <input id="audio-volume-range" type="range" min="0" max="100" step="5" onchange="updateAudioPrefs()">
-                    </div>
-                </div>
+            <div class="teacher-dock">
+                <button id="teacher-toggle-btn" class="teacher-toggle-btn" type="button" onclick="toggleTeacherDrawer()">≡</button>
             </div>
 
-            <div class="bottom-bar">
-                <div class="toolbar">
-                    <button id="start-btn" class="primary" onclick="toggleTraining()">开始分析</button>
-                    <button onclick="finishRound()">结束本轮</button>
-                    <button onclick="clearCurrentStudentHistory()">清空记录</button>
+            <section class="feedback-stage glass-panel" id="feedback-stage">
+                <div class="phase-badge" id="phase-badge">阶段：待机</div>
+                <div class="feedback-box">
+                    <div class="feedback-title" id="feedback-main">请侧身站立，保证全身入镜</div>
+                    <div class="feedback-sub" id="feedback-sub">建议从侧面拍摄，双脚和双手都要完整入镜，先站稳再开始动作。</div>
                 </div>
-            </div>
+            </section>
+
+            <section class="summary-stage glass-panel" id="round-summary-card">
+                <div class="summary-stage-title">本轮结果</div>
+                <div class="summary" id="round-summary">
+                    <div class="summary-card">
+                        <strong>动作结果</strong>
+                        <p>开始分析后，系统会按照“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作，并给出针对性指导。</p>
+                    </div>
+                </div>
+                <div class="summary-stage-actions">
+                    <button type="button" onclick="hideRoundSummaryCard()">先收起</button>
+                    <button type="button" class="primary" onclick="toggleTraining()">开始下一轮</button>
+                </div>
+            </section>
 
             <div class="overlay" id="overlay">
                 <div class="overlay-box">
@@ -646,10 +1181,20 @@
                     <div class="overlay-text" id="overlay-text">正在打开摄像头并加载姿态识别，请保持网络稳定并允许摄像头权限。</div>
                 </div>
             </div>
+
+            <div class="teacher-backdrop" id="teacher-backdrop" onclick="closeTeacherDrawer()"></div>
         </section>
 
-        <aside class="sidebar">
-            <section class="panel">
+        <aside class="sidebar" id="teacher-drawer">
+            <div class="drawer-header">
+                <div>
+                    <div class="drawer-title">教师菜单</div>
+                    <div class="drawer-subtitle">训练时只保留提示文字，设置和历史统一收进这里。</div>
+                </div>
+                <button type="button" class="drawer-close" onclick="closeTeacherDrawer()">×</button>
+            </div>
+
+            <section class="panel drawer-panel">
                 <h3>训练项目</h3>
                 <div class="mode-panel">
                     <select id="mode-select" onchange="changeMode()">
@@ -662,7 +1207,7 @@
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel drawer-panel">
                 <h3>课堂信息</h3>
                 <div class="meta-panel">
                     <div class="meta-grid">
@@ -683,32 +1228,37 @@
                 </div>
             </section>
 
-            <section class="panel">
-                <h2>实时反馈</h2>
-                <div class="phase-badge" id="phase-badge">阶段：待机</div>
-                <div class="feedback-box">
-                    <div class="feedback-title" id="feedback-main">请侧身站立，保证全身入镜</div>
-                    <div class="feedback-sub" id="feedback-sub">建议从侧面拍摄，双脚和双手都要完整入镜，先站稳再开始动作。</div>
+            <section class="panel drawer-panel">
+                <div class="drawer-section-header">
+                    <h3>训练控制</h3>
+                    <button id="sound-toggle" class="sound-toggle" type="button" onclick="toggleSoundPanel()">声音设置</button>
                 </div>
-                <div class="status-grid">
-                    <div class="metric">
-                        <div class="metric-label">练习次数</div>
-                        <div class="metric-value ok" id="practice-count">0</div>
+                <div class="drawer-action-grid">
+                    <button id="start-btn" class="primary" onclick="toggleTraining()">开始分析</button>
+                    <button onclick="finishRound()">结束本轮</button>
+                    <button onclick="clearCurrentStudentHistory()">清空记录</button>
+                </div>
+                <div id="sound-panel" class="sound-panel drawer-sound-panel">
+                    <div class="sound-row">
+                        <label for="sound-effects-toggle">音效</label>
+                        <input id="sound-effects-toggle" type="checkbox" onchange="updateAudioPrefs()">
+                    </div>
+                    <div class="sound-row">
+                        <label for="voice-guidance-toggle">语音提醒</label>
+                        <input id="voice-guidance-toggle" type="checkbox" onchange="updateAudioPrefs()">
+                    </div>
+                    <div class="sound-row">
+                        <label for="voice-praise-toggle">鼓励语音</label>
+                        <input id="voice-praise-toggle" type="checkbox" onchange="updateAudioPrefs()">
+                    </div>
+                    <div class="sound-volume">
+                        <label for="audio-volume-range">音量</label>
+                        <input id="audio-volume-range" type="range" min="0" max="100" step="5" onchange="updateAudioPrefs()">
                     </div>
                 </div>
             </section>
 
-            <section class="panel">
-                <h3>本轮结果</h3>
-                <div class="summary" id="round-summary">
-                    <div class="summary-card">
-                        <strong>动作结果</strong>
-                        <p>开始分析后，系统会按照“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作，并给出针对性指导。</p>
-                    </div>
-                </div>
-            </section>
-
-            <section class="panel" style="min-height: 0; display: flex; flex-direction: column;">
+            <section class="panel drawer-panel history-panel">
                 <h3>学生历史</h3>
                 <p class="muted">每次结束本轮后，会保存当前学生的练习次数、主要问题和下一轮建议。</p>
                 <p class="muted sync-status" id="sync-status">云端同步：准备中。</p>
@@ -845,6 +1395,7 @@
         const feedbackSub = document.getElementById('feedback-sub');
         const practiceCountEl = document.getElementById('practice-count');
         const roundSummary = document.getElementById('round-summary');
+        const roundSummaryCard = document.getElementById('round-summary-card');
         const historyList = document.getElementById('history-list');
         const studentListContainer = document.getElementById('student-list-container');
         const startBtn = document.getElementById('start-btn');
@@ -860,6 +1411,8 @@
         const syncStatusEl = document.getElementById('sync-status');
         const soundPanel = document.getElementById('sound-panel');
         const soundToggle = document.getElementById('sound-toggle');
+        const teacherDrawer = document.getElementById('teacher-drawer');
+        const teacherBackdrop = document.getElementById('teacher-backdrop');
         const soundEffectsToggle = document.getElementById('sound-effects-toggle');
         const voiceGuidanceToggle = document.getElementById('voice-guidance-toggle');
         const voicePraiseToggle = document.getElementById('voice-praise-toggle');
@@ -1012,13 +1565,41 @@
 
         function closeSoundPanel() {
             soundPanel.classList.remove('is-open');
-            soundToggle.textContent = '声音提示';
+            soundToggle.textContent = '声音设置';
         }
 
         function toggleSoundPanel() {
             const isOpen = !soundPanel.classList.contains('is-open');
             soundPanel.classList.toggle('is-open', isOpen);
-            soundToggle.textContent = isOpen ? '收起声音' : '声音提示';
+            soundToggle.textContent = isOpen ? '收起声音' : '声音设置';
+        }
+
+        function openTeacherDrawer() {
+            teacherDrawer.classList.add('is-open');
+            teacherBackdrop.classList.add('is-open');
+        }
+
+        function closeTeacherDrawer() {
+            teacherDrawer.classList.remove('is-open');
+            teacherBackdrop.classList.remove('is-open');
+            closeSoundPanel();
+        }
+
+        function toggleTeacherDrawer() {
+            if (teacherDrawer.classList.contains('is-open')) {
+                closeTeacherDrawer();
+                return;
+            }
+            closeStudentPanel();
+            openTeacherDrawer();
+        }
+
+        function hideRoundSummaryCard() {
+            roundSummaryCard.classList.remove('is-visible');
+        }
+
+        function showRoundSummaryCard() {
+            roundSummaryCard.classList.add('is-visible');
         }
 
         function updateAudioPrefs() {
@@ -1632,6 +2213,7 @@
             app.drillFrames = 0;
             updateCounters();
             if (!keepFeedback) {
+                hideRoundSummaryCard();
                 updateFeedback('请侧身站立，保证全身入镜', '系统会按“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作。', 'IDLE');
                 renderRoundSummary();
             }
@@ -2176,6 +2758,7 @@
             startBtn.textContent = app.training ? '暂停分析' : '开始分析';
             startBtn.className = app.training ? 'danger' : 'primary';
             if (app.training) {
+                closeTeacherDrawer();
                 resetRound(false);
                 playTone('start');
                 updateFeedback('请先站稳准备', '侧身站立，保持 1 秒稳定后再进入预摆。', 'IDLE');
@@ -2193,6 +2776,7 @@
                 startBtn.className = 'primary';
             }
             renderRoundSummary();
+            showRoundSummaryCard();
             saveRoundHistory();
             playTone('finish');
             const suggestion = pickSuggestion();
@@ -2224,93 +2808,17 @@
             }
         }
 
-        function renderStudentOptions() {
-            ensureCurrentStudent();
-            studentListContainer.innerHTML = '';
-            Object.keys(app.students).forEach(name => {
-                const row = document.createElement('div');
-                row.className = `student-row${name === app.currentStudent ? ' is-active' : ''}`;
-                row.addEventListener('click', () => changeStudent(name));
+        document.addEventListener('click', event => {
+            if (!studentDock.contains(event.target)) closeStudentPanel();
+        });
 
-                const label = document.createElement('span');
-                label.className = 'student-row-name';
-                label.textContent = name;
-                row.appendChild(label);
-
-                if (name !== '默认学生') {
-                    const removeBtn = document.createElement('button');
-                    removeBtn.type = 'button';
-                    removeBtn.className = 'student-row-delete';
-                    removeBtn.textContent = '×';
-                    removeBtn.addEventListener('click', event => {
-                        event.stopPropagation();
-                        deleteStudent(name);
-                    });
-                    row.appendChild(removeBtn);
-                }
-
-                studentListContainer.appendChild(row);
-            });
-            studentToggle.textContent = app.currentStudent;
-            renderHistory();
-        }
-
-        function closeStudentPanel() {
-            studentPanel.classList.remove('is-open');
-            studentToggle.textContent = app.currentStudent;
-        }
-
-        function toggleStudentPanel() {
-            const isOpen = !studentPanel.classList.contains('is-open');
-            studentPanel.classList.toggle('is-open', isOpen);
-            studentToggle.textContent = isOpen ? '收起管理' : app.currentStudent;
-            if (isOpen) requestAnimationFrame(() => studentNameInput.focus());
-        }
-
-        function deleteStudent(name = app.currentStudent) {
-            const names = Object.keys(app.students);
-            if (names.length <= 1) return;
-            if (!confirm(`确定删除 ${name} 吗？`)) return;
-            delete app.students[name];
-            if (app.currentStudent === name) app.currentStudent = Object.keys(app.students)[0];
-            saveStudents();
-            renderStudentOptions();
-            closeStudentPanel();
-        }
-
-        function renderHistory() {
-            historyList.innerHTML = '';
-            const records = app.students[app.currentStudent] || [];
-            if (records.length === 0) {
-                historyList.innerHTML = '<div class="history-item"><div class="result">当前学生还没有保存的练习记录。</div></div>';
-                return;
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') {
+                closeTeacherDrawer();
+                closeStudentPanel();
+                hideRoundSummaryCard();
             }
-            [...records].reverse().forEach(record => {
-                const div = document.createElement('div');
-                div.className = 'history-item';
-                div.innerHTML = renderHistoryItem(record);
-                historyList.appendChild(div);
-            });
-        }
-
-        function renderRoundSummary() {
-            if (!app.round) return;
-            roundSummary.innerHTML = `
-                <div class="summary-card"><strong>本轮结果</strong><p>本轮共练习 ${app.round.practiceCount} 次。</p></div>
-                <div class="summary-card"><strong>主要指导</strong><p>${buildTopReasonText(app.round.failReasons) || '本轮没有明显动作问题。'}</p></div>
-                <div class="summary-card"><strong>继续保持</strong><p>${buildTopReasonText(app.round.improvementReasons) || '整体动作较完整，继续保持预摆、蹬伸和落地缓冲节奏。'}</p></div>
-                <div class="summary-card"><strong>下一轮建议</strong><p>${pickSuggestion()}</p></div>
-            `;
-        }
-
-        function saveRoundHistory() {
-            if (!app.round) return;
-            const record = buildRoundRecord();
-            app.students[app.currentStudent].push(record);
-            saveStudents();
-            renderHistory();
-            queueRoundRecord(record);
-        }
+        });
 
         normalizePracticeUi();
         applyAudioPrefsToUi();
