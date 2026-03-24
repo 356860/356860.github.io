@@ -58,10 +58,10 @@
             inset: 0;
             width: 100%;
             height: 100%;
-            object-fit: contain;
         }
 
         #video-layer {
+            object-fit: cover;
             transform: scaleX(-1);
             opacity: 0.9;
             filter: contrast(1.04) saturate(0.96) brightness(0.92);
@@ -620,14 +620,15 @@
 
         #video-layer,
         #draw-layer {
-            inset: 2.5% 11.5% 9%;
-            width: 77%;
-            height: 79%;
-            border-radius: 36px;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
         }
 
         #draw-layer {
             z-index: 2;
+            pointer-events: none;
         }
 
         .student-dock,
@@ -726,8 +727,8 @@
         .feedback-stage {
             position: absolute;
             left: 50%;
-            bottom: 42px;
-            width: min(820px, calc(100vw - 280px));
+            bottom: 34px;
+            width: min(820px, calc(100vw - 120px));
             padding: 22px 26px 24px;
             border-radius: 30px;
             transform: translateX(-50%);
@@ -768,8 +769,8 @@
         .summary-stage {
             position: absolute;
             left: 50%;
-            bottom: 44px;
-            width: min(860px, calc(100vw - 220px));
+            bottom: 34px;
+            width: min(860px, calc(100vw - 120px));
             padding: 24px;
             border-radius: 30px;
             opacity: 0;
@@ -1044,10 +1045,10 @@
             body { overflow: hidden; }
             #video-layer,
             #draw-layer {
-                inset: 70px 12px 160px;
-                width: calc(100% - 24px);
-                height: calc(100% - 230px);
-                border-radius: 28px;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+                border-radius: 0;
             }
             .counter-dock {
                 top: 14px;
@@ -1087,7 +1088,7 @@
             }
             .feedback-stage,
             .summary-stage {
-                width: calc(100vw - 24px);
+                width: calc(100vw - 20px);
                 left: 12px;
                 bottom: 14px;
                 transform: none;
@@ -1267,6 +1268,8 @@
         </aside>
     </div>
 
+    <script src="./js/jump-core.js"></script>
+    <script src="./js/jump-storage.js"></script>
     <script>
         const STORAGE_KEY = 'jump-gemini-phase-studio-v1';
         const AUDIO_PREFS_KEY = 'jump-gemini-audio-prefs-v1';
@@ -1275,7 +1278,22 @@
         const SUPABASE_URL = 'https://dmssegbmfnngigjiaqgv.supabase.co';
         const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_n-sRBVrmElw3Lv0HU5e6uQ_rSfgklXe';
         const SUPABASE_TABLE = 'jump_round_records';
-        const REQUIRED_POINTS = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+        const {
+            REQUIRED_POINTS,
+            JUMP_CONFIG,
+            ISSUE_META,
+            pointVisible: corePointVisible,
+            extractFeatures: extractCoreFeatures,
+            smoothFeatures: smoothCoreFeatures,
+            createRoundState,
+            createAttemptState,
+            incrementReason: coreIncrementReason,
+            topReasonEntries: coreTopReasonEntries,
+            buildTopReasonText: coreBuildTopReasonText,
+            pickSuggestion: corePickSuggestion,
+            buildRoundAnalysis: coreBuildRoundAnalysis
+        } = window.JumpCore;
+        const storage = window.JumpStorage.createStore({ dbName: 'jump-training-db', storeName: 'state' });
         const CONNECTORS = [
             [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
             [11, 23], [12, 24], [23, 24], [23, 25], [24, 26],
@@ -1292,52 +1310,6 @@
                 flight: { hipForwardDelta: [0.007, 0.013], trunkLean: [5.547, 9.547] },
                 landing: { kneeAngle: [165.534, 169.534], heelLead: [-0.013, -0.009] }
             }
-        };
-
-        const JUMP_CONFIG = {
-            minVisibility: 0.45,
-            emaAlpha: 0.3,
-            readyHoldFrames: 6,
-            readyKneeMin: 148,
-            readyHipMin: 140,
-            preloadKneeMax: 164,
-            preloadHipMax: 160,
-            preloadMinFrames: 3,
-            takeoffConfirmFrames: 2,
-            flightConfirmFrames: 2,
-            landingConfirmFrames: 2,
-            preloadTimeoutMs: 1400,
-            minPreloadDepth: 0.024,
-            takeoffKneeMin: 138,
-            takeoffRise: 0.009,
-            minArmSwingRise: 0.03,
-            minFlightForward: 0.012,
-            takeoffTimeoutMs: 750,
-            flightTimeoutMs: 950,
-            landingKneeMax: 150,
-            landingTimeoutMs: 900,
-            roundCooldownFrames: 18,
-            stableMotionThreshold: 0.02,
-            heelLeadMin: -0.09,
-            targetTrackRatio: 1.35,
-            targetTorsoMinRatio: 0.72,
-            targetTorsoMaxRatio: 1.38,
-            targetGraceFrames: 4,
-            maxLowerBodyLossFrames: 3,
-            doubleTakeoffSyncRatio: 0.025
-        };
-
-        const ISSUE_META = {
-            not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站立 1 秒，再做完整预摆和起跳。' },
-            preload_weak: { label: '预摆不足', tip: '预摆再深一点，膝和髋要一起下沉。', advice: '下一轮先做 3 次慢预摆，再做完整动作。' },
-            takeoff_weak: { label: '蹬伸不充分', tip: '起跳时髋膝要更快伸展。', advice: '蹬地时注意伸髋伸膝，向前上方发力。' },
-            arm_weak: { label: '摆臂不积极', tip: '双臂从后向前上方快速摆起。', advice: '练习大臂后摆到前上摆，带动起跳节奏。' },
-            flight_short: { label: '腾空前送不足', tip: '蹬地后继续向前送髋。', advice: '下次蹬地更完整，让身体前移更明显。' },
-            landing_stiff: { label: '落地缓冲不足', tip: '落地时主动屈膝缓冲。', advice: '脚跟落地后及时屈膝收髋，减小冲击。' },
-            heel_late: { label: '落地脚跟不明显', tip: '脚跟先接触，再过渡到全脚掌。', advice: '多做小跳缓冲练习，体会脚跟先着地。' },
-            keypoint_lost: { label: '入镜不完整', tip: '请保持全身完整入镜。', advice: '调整站位，保证双脚和双手都能被看到。' },
-            target_size_drift: { label: '识别目标跑偏', tip: '请保持与镜头的距离稳定，避免背景人物遮挡。', advice: '系统会自动锁定练习者，如果位置和人体大小突然变化，会暂时忽略异常帧。' },
-            double_takeoff_async: { label: '双脚起跳不同步', tip: '注意双脚同时起跳哦。', advice: '先做预摆蹬伸专项，体会两脚一起蹬地发力。' }
         };
 
         const DRILL_CONTENT = {
@@ -1362,7 +1334,7 @@
         const app = {
             ready: false,
             training: false,
-            students: loadStudents(),
+            students: { '默认学生': [] },
             currentStudent: '',
             round: null,
             phase: 'IDLE',
@@ -1420,18 +1392,22 @@
         const titleChip = document.querySelector('.title-chip');
         const studentDock = document.querySelector('.student-dock');
         const audioState = {
-            prefs: loadAudioPrefs(),
+            prefs: { effects: true, guidance: true, praise: true, volume: 0.8 },
             ctx: null,
             lastGuidanceText: '',
             lastGuidanceAt: 0,
             lastPraiseAt: 0
         };
         const syncState = {
-            queue: loadSyncQueue(),
+            queue: [],
             flushing: false,
             lastMessage: ''
         };
-        const sessionMeta = loadSessionMeta();
+        const sessionMeta = {
+            className: '',
+            groupName: '',
+            sessionLabel: ''
+        };
         const PRAISE_LINES = [
             '这次节奏很好，继续保持。',
             '动作越来越连贯了。',
@@ -1456,24 +1432,18 @@
             if (historyHint) historyHint.textContent = '每次结束本轮后，会保存当前学生的练习次数、主要问题和下一轮建议。';
         }
 
-        function loadAudioPrefs() {
-            try {
-                const raw = localStorage.getItem(AUDIO_PREFS_KEY);
-                if (!raw) return { effects: true, guidance: true, praise: true, volume: 0.8 };
-                const parsed = JSON.parse(raw);
-                return {
-                    effects: parsed.effects !== false,
-                    guidance: parsed.guidance !== false,
-                    praise: parsed.praise !== false,
-                    volume: typeof parsed.volume === 'number' ? Math.min(1, Math.max(0, parsed.volume)) : 0.8
-                };
-            } catch (error) {
-                return { effects: true, guidance: true, praise: true, volume: 0.8 };
-            }
+        function normalizeAudioPrefs(source) {
+            const parsed = source && typeof source === 'object' ? source : {};
+            return {
+                effects: parsed.effects !== false,
+                guidance: parsed.guidance !== false,
+                praise: parsed.praise !== false,
+                volume: typeof parsed.volume === 'number' ? Math.min(1, Math.max(0, parsed.volume)) : 0.8
+            };
         }
 
         function saveAudioPrefs() {
-            localStorage.setItem(AUDIO_PREFS_KEY, JSON.stringify(audioState.prefs));
+            storage.set(AUDIO_PREFS_KEY, audioState.prefs).catch(error => console.warn('saveAudioPrefs failed', error));
         }
 
         function applyAudioPrefsToUi() {
@@ -1611,21 +1581,8 @@
             saveAudioPrefs();
         }
 
-        function loadStudents() {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (raw) {
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) return parsed;
-                } catch (err) {
-                    console.warn('Failed to load student store', err);
-                }
-            }
-            return { '默认学生': [] };
-        }
-
         function saveStudents() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(app.students));
+            storage.set(STORAGE_KEY, app.students).catch(error => console.warn('saveStudents failed', error));
         }
 
         function createDefaultSessionLabel() {
@@ -1639,29 +1596,8 @@
             return `${dateText} ${dayPart}`;
         }
 
-        function loadSessionMeta() {
-            const fallback = {
-                className: '',
-                groupName: '',
-                sessionLabel: createDefaultSessionLabel()
-            };
-            try {
-                const raw = localStorage.getItem(SESSION_META_KEY);
-                if (!raw) return fallback;
-                const parsed = JSON.parse(raw);
-                return {
-                    className: typeof parsed.className === 'string' ? parsed.className : '',
-                    groupName: typeof parsed.groupName === 'string' ? parsed.groupName : '',
-                    sessionLabel: typeof parsed.sessionLabel === 'string' && parsed.sessionLabel.trim() ? parsed.sessionLabel : fallback.sessionLabel
-                };
-            } catch (error) {
-                console.warn('Failed to load session meta', error);
-                return fallback;
-            }
-        }
-
         function saveSessionMeta() {
-            localStorage.setItem(SESSION_META_KEY, JSON.stringify(sessionMeta));
+            storage.set(SESSION_META_KEY, sessionMeta).catch(error => console.warn('saveSessionMeta failed', error));
         }
 
         function applySessionMetaToUi() {
@@ -1679,20 +1615,31 @@
             refreshSyncStatus();
         }
 
-        function loadSyncQueue() {
-            try {
-                const raw = localStorage.getItem(SYNC_QUEUE_KEY);
-                if (!raw) return [];
-                const parsed = JSON.parse(raw);
-                return Array.isArray(parsed) ? parsed : [];
-            } catch (error) {
-                console.warn('Failed to load sync queue', error);
-                return [];
-            }
+        function saveSyncQueue() {
+            storage.set(SYNC_QUEUE_KEY, syncState.queue).catch(error => console.warn('saveSyncQueue failed', error));
         }
 
-        function saveSyncQueue() {
-            localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncState.queue));
+        async function hydratePersistentState() {
+            const defaults = {
+                [STORAGE_KEY]: { '默认学生': [] },
+                [AUDIO_PREFS_KEY]: { effects: true, guidance: true, praise: true, volume: 0.8 },
+                [SYNC_QUEUE_KEY]: [],
+                [SESSION_META_KEY]: {
+                    className: '',
+                    groupName: '',
+                    sessionLabel: createDefaultSessionLabel()
+                }
+            };
+            await storage.migrateFromLocalStorage(defaults);
+            const snapshot = await storage.loadSnapshot(defaults);
+            app.students = snapshot[STORAGE_KEY] && Object.keys(snapshot[STORAGE_KEY]).length > 0 ? snapshot[STORAGE_KEY] : { '默认学生': [] };
+            audioState.prefs = normalizeAudioPrefs(snapshot[AUDIO_PREFS_KEY]);
+            syncState.queue = Array.isArray(snapshot[SYNC_QUEUE_KEY]) ? snapshot[SYNC_QUEUE_KEY] : [];
+            sessionMeta.className = typeof snapshot[SESSION_META_KEY]?.className === 'string' ? snapshot[SESSION_META_KEY].className : '';
+            sessionMeta.groupName = typeof snapshot[SESSION_META_KEY]?.groupName === 'string' ? snapshot[SESSION_META_KEY].groupName : '';
+            sessionMeta.sessionLabel = typeof snapshot[SESSION_META_KEY]?.sessionLabel === 'string' && snapshot[SESSION_META_KEY].sessionLabel.trim()
+                ? snapshot[SESSION_META_KEY].sessionLabel
+                : createDefaultSessionLabel();
         }
 
         function setSyncStatus(message, tone = '') {
@@ -1730,21 +1677,7 @@
         }
 
         function buildRoundAnalysis() {
-            const successCount = app.round && Number.isFinite(app.round.successCount) ? app.round.successCount : 0;
-            const failedCount = app.round && Number.isFinite(app.round.failedCount) ? app.round.failedCount : 0;
-            const practiceCount = app.round && Number.isFinite(app.round.practiceCount) ? app.round.practiceCount : successCount + failedCount;
-            const topReasonsText = app.round ? buildTopReasonText(app.round.failReasons) : '';
-            const improvementText = app.round ? buildTopReasonText(app.round.improvementReasons) : '';
-            const suggestion = app.round ? pickSuggestion() : '动作整体较完整，下一轮继续保持。';
-            return {
-                practiceCount,
-                successCount,
-                failedCount,
-                topReasonsText,
-                improvementText,
-                suggestion,
-                summaryText: `本轮练习 ${practiceCount} 次，成功 ${successCount} 次，未成功 ${failedCount} 次。主要问题：${topReasonsText || '未发现明显失败原因'}。继续优化：${improvementText || '整体动作较完整'}。下一轮建议：${suggestion}`
-            };
+            return coreBuildRoundAnalysis(app.round || createRoundState(), currentMode(), ISSUE_META);
         }
 
         function buildRoundRecord() {
@@ -2014,185 +1947,20 @@
         window.addEventListener('resize', resizeCanvas);
 
         function pointVisible(point) {
-            return point && typeof point.x === 'number' && typeof point.y === 'number' && (point.visibility == null || point.visibility >= JUMP_CONFIG.minVisibility);
-        }
-
-        function allRequiredVisible(landmarks) {
-            return REQUIRED_POINTS.every(index => pointVisible(landmarks[index]));
-        }
-
-        function midpoint(a, b) {
-            return {
-                x: (a.x + b.x) / 2,
-                y: (a.y + b.y) / 2,
-                z: (((typeof a.z === 'number' ? a.z : 0) + (typeof b.z === 'number' ? b.z : 0)) / 2)
-            };
-        }
-
-        function distance(a, b) {
-            return Math.hypot(a.x - b.x, a.y - b.y);
-        }
-
-        function getAngle2D(a, b, c) {
-            if (!a || !b || !c) return 180;
-            const abx = a.x - b.x;
-            const aby = a.y - b.y;
-            const cbx = c.x - b.x;
-            const cby = c.y - b.y;
-            const ab = Math.hypot(abx, aby);
-            const cb = Math.hypot(cbx, cby);
-            if (!ab || !cb) return 180;
-            const cosine = Math.min(1, Math.max(-1, (abx * cbx + aby * cby) / (ab * cb)));
-            return Math.acos(cosine) * 180 / Math.PI;
-        }
-
-        function getAngle3D(a, b, c) {
-            if (!a || !b || !c) return 180;
-            const ab = {
-                x: (a.x - b.x),
-                y: (a.y - b.y),
-                z: ((typeof a.z === 'number' ? a.z : 0) - (typeof b.z === 'number' ? b.z : 0))
-            };
-            const cb = {
-                x: (c.x - b.x),
-                y: (c.y - b.y),
-                z: ((typeof c.z === 'number' ? c.z : 0) - (typeof b.z === 'number' ? b.z : 0))
-            };
-            const dot = ab.x * cb.x + ab.y * cb.y + ab.z * cb.z;
-            const magAB = Math.hypot(ab.x, ab.y, ab.z);
-            const magCB = Math.hypot(cb.x, cb.y, cb.z);
-            if (!magAB || !magCB) return 180;
-            const cosine = Math.min(1, Math.max(-1, dot / (magAB * magCB)));
-            return Math.acos(cosine) * 180 / Math.PI;
-        }
-
-        function getAngle(a, b, c) {
-            const angle2D = getAngle2D(a, b, c);
-            const angle3D = getAngle3D(a, b, c);
-            const diff = Math.abs(angle3D - angle2D);
-            if (diff <= 18) return angle3D;
-            if (diff >= 45) return angle2D;
-            const weight3D = (45 - diff) / (45 - 18);
-            return angle2D * (1 - weight3D) + angle3D * weight3D;
-        }
-
-        function getVisibleSide(landmarks) {
-            const weights = {
-                11: 0.6, 12: 0.6,
-                15: 0.35, 16: 0.35,
-                23: 1.5, 24: 1.5,
-                25: 1.3, 26: 1.3,
-                27: 1.2, 28: 1.2,
-                29: 1.0, 30: 1.0,
-                31: 1.0, 32: 1.0
-            };
-            const leftIndexes = [11, 15, 23, 25, 27, 29, 31];
-            const rightIndexes = [12, 16, 24, 26, 28, 30, 32];
-            const score = (indexes) => indexes.reduce((sum, index) => {
-                const p = landmarks[index];
-                return sum + (((p && p.visibility) || 0) * (weights[index] || 1));
-            }, 0);
-            const leftScore = score(leftIndexes);
-            const rightScore = score(rightIndexes);
-            return leftScore >= rightScore ? 'left' : 'right';
+            return corePointVisible(point, JUMP_CONFIG.minVisibility);
         }
 
         function extractFeatures(landmarks) {
-            if (!allRequiredVisible(landmarks)) return null;
-            const hipMid = midpoint(landmarks[23], landmarks[24]);
-            const shoulderMid = midpoint(landmarks[11], landmarks[12]);
-            const side = getVisibleSide(landmarks);
-            const useLeft = side === 'left';
-            const hip = landmarks[useLeft ? 23 : 24];
-            const knee = landmarks[useLeft ? 25 : 26];
-            const ankle = landmarks[useLeft ? 27 : 28];
-            const heel = landmarks[useLeft ? 29 : 30];
-            const footIndex = landmarks[useLeft ? 31 : 32];
-            const shoulder = landmarks[useLeft ? 11 : 12];
-            const wrist = landmarks[useLeft ? 15 : 16];
-            const otherShoulder = landmarks[useLeft ? 12 : 11];
-            const torso = Math.max(distance(shoulderMid, hipMid), 0.001);
-            const shoulderWidth = Math.max(distance(landmarks[11], landmarks[12]), 0.001);
-            const leftAnkle = landmarks[27];
-            const rightAnkle = landmarks[28];
-            const leftLift = hipMid.y - leftAnkle.y;
-            const rightLift = hipMid.y - rightAnkle.y;
-            const ankleAsync = Math.abs(leftLift - rightLift) / torso;
-            const ankleForwardAsync = Math.abs(leftAnkle.x - rightAnkle.x) / torso;
-            return {
-                hipMid,
-                ankle,
-                wrist,
-                torso,
-                shoulderWidth,
-                kneeAngle2D: getAngle2D(hip, knee, ankle),
-                kneeAngle3D: getAngle3D(hip, knee, ankle),
-                hipAngle2D: getAngle2D(shoulder, hip, knee),
-                hipAngle3D: getAngle3D(shoulder, hip, knee),
-                kneeAngle: getAngle(hip, knee, ankle),
-                hipAngle: getAngle(shoulder, hip, knee),
-                armLift: (shoulder.y - wrist.y) / torso,
-                wristBack: Math.abs(wrist.x - otherShoulder.x) / shoulderWidth,
-                heelLead: (heel.y - footIndex.y) / torso,
-                ankleAsync,
-                ankleForwardAsync,
-                lowerBodyVisible: [23, 24, 25, 26, 27, 28, 29, 30, 31, 32].every(index => pointVisible(landmarks[index]))
-            };
-        }
-
-        function blendNumber(prev, curr, alpha) {
-            if (!Number.isFinite(prev)) return curr;
-            if (!Number.isFinite(curr)) return prev;
-            return prev * (1 - alpha) + curr * alpha;
-        }
-
-        function blendPoint(prev, curr, alpha) {
-            if (!prev) return curr;
-            if (!curr) return prev;
-            return {
-                x: blendNumber(prev.x, curr.x, alpha),
-                y: blendNumber(prev.y, curr.y, alpha),
-                z: blendNumber(prev.z, curr.z, alpha)
-            };
+            return extractCoreFeatures(landmarks, JUMP_CONFIG);
         }
 
         function smoothFeatures(features) {
-            const alpha = JUMP_CONFIG.emaAlpha;
-            const prev = app.smoothFeatures;
-            if (!prev) {
-                app.smoothFeatures = {
-                    ...features,
-                    hipMid: { ...features.hipMid },
-                    ankle: { ...features.ankle },
-                    wrist: { ...features.wrist }
-                };
-                return app.smoothFeatures;
-            }
-            const next = {
-                ...features,
-                hipMid: blendPoint(prev.hipMid, features.hipMid, alpha),
-                ankle: blendPoint(prev.ankle, features.ankle, alpha),
-                wrist: blendPoint(prev.wrist, features.wrist, alpha),
-                torso: blendNumber(prev.torso, features.torso, alpha),
-                shoulderWidth: blendNumber(prev.shoulderWidth, features.shoulderWidth, alpha),
-                kneeAngle2D: blendNumber(prev.kneeAngle2D, features.kneeAngle2D, alpha),
-                kneeAngle3D: blendNumber(prev.kneeAngle3D, features.kneeAngle3D, alpha),
-                kneeAngle: blendNumber(prev.kneeAngle, features.kneeAngle, alpha),
-                hipAngle2D: blendNumber(prev.hipAngle2D, features.hipAngle2D, alpha),
-                hipAngle3D: blendNumber(prev.hipAngle3D, features.hipAngle3D, alpha),
-                hipAngle: blendNumber(prev.hipAngle, features.hipAngle, alpha),
-                armLift: blendNumber(prev.armLift, features.armLift, alpha),
-                wristBack: blendNumber(prev.wristBack, features.wristBack, alpha),
-                heelLead: blendNumber(prev.heelLead, features.heelLead, alpha),
-                ankleAsync: blendNumber(prev.ankleAsync, features.ankleAsync, alpha),
-                ankleForwardAsync: blendNumber(prev.ankleForwardAsync, features.ankleForwardAsync, alpha)
-            };
-            app.smoothFeatures = next;
-            return next;
+            app.smoothFeatures = smoothCoreFeatures(app.smoothFeatures, features, JUMP_CONFIG.emaAlpha);
+            return app.smoothFeatures;
         }
 
         function resetRound(keepFeedback) {
-            app.round = { startedAt: Date.now(), practiceCount: 0, successCount: 0, failedCount: 0, failReasons: {}, improvementReasons: {} };
+            app.round = createRoundState();
             app.phase = 'IDLE';
             app.phaseFrames = 0;
             app.phaseStartedAt = 0;
@@ -2244,17 +2012,15 @@
         }
 
         function incrementReason(bucket, code) {
-            bucket[code] = (bucket[code] || 0) + 1;
+            coreIncrementReason(bucket, code);
         }
 
         function topReasonEntries(bucket) {
-            return Object.entries(bucket).sort((a, b) => b[1] - a[1]).slice(0, 2);
+            return coreTopReasonEntries(bucket);
         }
 
         function buildTopReasonText(bucket) {
-            const entries = topReasonEntries(bucket);
-            if (entries.length === 0) return '';
-            return entries.map(([code, count]) => `${ISSUE_META[code].label}${count}次`).join('，');
+            return coreBuildTopReasonText(bucket, ISSUE_META);
         }
 
         function hasAttemptSignal(features) {
@@ -2315,14 +2081,7 @@
         }
 
         function pickSuggestion() {
-            const failTop = topReasonEntries(app.round.failReasons);
-            if (failTop.length > 0) return ISSUE_META[failTop[0][0]].advice;
-            const improveTop = topReasonEntries(app.round.improvementReasons);
-            if (improveTop.length > 0) return `已经完成动作，下一轮重点优化：${ISSUE_META[improveTop[0][0]].label}。`;
-            if (currentMode() === 'arms') return '继续练大臂后摆到前上摆的完整节奏。';
-            if (currentMode() === 'preload') return '下一轮继续先屈膝预摆，再快速蹬伸。';
-            if (currentMode() === 'landing') return '下一轮继续保持脚跟着地和屈膝缓冲。';
-            return '动作整体较完整，下一轮继续保持预摆、蹬伸和落地缓冲节奏。';
+            return corePickSuggestion(app.round, currentMode(), ISSUE_META);
         }
 
         function renderRoundSummary() {
@@ -2346,21 +2105,7 @@
 
         function beginAttempt() {
             app.attemptStartedAt = Date.now();
-            app.attempt = {
-                baselineHipY: app.baseline.hipY,
-                baselineHipX: app.baseline.hipX,
-                baselineAnkleY: app.baseline.ankleY,
-                baselineWristY: app.baseline.wristY,
-                baselineTorso: app.baseline.torso || 0.001,
-                maxDepth: 0,
-                maxRise: 0,
-                maxArmLift: 0,
-                maxForward: 0,
-                landingKneeAngle: 180,
-                maxHeelLead: -1,
-                maxAnkleAsync: 0,
-                maxAnkleForwardAsync: 0
-            };
+            app.attempt = createAttemptState(app.baseline);
             app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
             updateFeedback('进入预摆阶段', '继续下蹲预摆，准备快速蹬地起跳。', 'PRELOAD');
         }
@@ -2820,20 +2565,25 @@
             }
         });
 
-        normalizePracticeUi();
-        applyAudioPrefsToUi();
-        applySessionMetaToUi();
-        app.currentStudent = Object.keys(app.students)[0];
-        renderStudentOptions();
-        refreshSyncStatus();
-        window.addEventListener('online', flushSyncQueue);
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible') flushSyncQueue();
-        });
-        renderDrills();
-        resetRound(false);
-        initCamera();
-        setTimeout(() => flushSyncQueue(), 1200);
+        async function bootstrapApp() {
+            normalizePracticeUi();
+            await hydratePersistentState();
+            applyAudioPrefsToUi();
+            applySessionMetaToUi();
+            app.currentStudent = Object.keys(app.students)[0];
+            renderStudentOptions();
+            refreshSyncStatus();
+            window.addEventListener('online', flushSyncQueue);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') flushSyncQueue();
+            });
+            renderDrills();
+            resetRound(false);
+            await initCamera();
+            setTimeout(() => flushSyncQueue(), 1200);
+        }
+
+        bootstrapApp();
     </script>
 </body>
 </html>
