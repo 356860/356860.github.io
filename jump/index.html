@@ -632,6 +632,7 @@
 
         .student-dock,
         .counter-dock,
+        .stage-side,
         .teacher-dock,
         .feedback-stage,
         .summary-stage {
@@ -723,6 +724,105 @@
             box-shadow: 0 18px 36px rgba(0, 0, 0, 0.24);
         }
 
+        .stage-side {
+            position: absolute;
+            top: 112px;
+            width: 180px;
+            padding: 16px;
+            border-radius: 24px;
+        }
+
+        .stage-side-left {
+            left: 22px;
+        }
+
+        .stage-side-right {
+            right: 22px;
+            top: 132px;
+        }
+
+        .stage-side-kicker {
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: rgba(221, 230, 245, 0.68);
+        }
+
+        .stage-mode-name {
+            margin-bottom: 12px;
+            font-size: 22px;
+            line-height: 1.15;
+            font-weight: 800;
+            color: #f6f9ff;
+        }
+
+        .stage-drill-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .stage-drill-item {
+            padding: 12px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .stage-drill-item strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 13px;
+            color: #f6f9ff;
+        }
+
+        .stage-drill-item span {
+            display: block;
+            font-size: 12px;
+            line-height: 1.6;
+            color: rgba(217, 226, 241, 0.8);
+        }
+
+        .stage-actions {
+            display: grid;
+            gap: 10px;
+        }
+
+        .stage-actions button {
+            min-height: 46px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.08);
+            color: #edf3ff;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .stage-actions button.primary {
+            background: linear-gradient(180deg, rgba(82, 150, 255, 0.98), rgba(36, 107, 255, 0.96));
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .stage-actions button.danger {
+            background: linear-gradient(180deg, rgba(244, 99, 99, 0.96), rgba(217, 64, 64, 0.94));
+            color: #fff;
+            border-color: transparent;
+        }
+
+        .stage-actions button:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .stage-status-copy {
+            margin-top: 12px;
+            font-size: 12px;
+            line-height: 1.7;
+            color: rgba(211, 223, 240, 0.78);
+        }
+
         .feedback-stage {
             position: absolute;
             left: 50%;
@@ -730,16 +830,21 @@
             width: min(820px, calc(100vw - 120px));
             padding: 22px 26px 24px;
             border-radius: 30px;
-            transform: translateX(-50%);
+            transform: translate(-50%, 18px);
             text-align: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+        }
+
+        .feedback-stage.is-visible {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translate(-50%, 0);
         }
 
         .phase-badge {
-            justify-self: center;
-            margin-bottom: 14px;
-            padding: 8px 14px;
-            background: rgba(255, 255, 255, 0.14);
-            color: rgba(243, 246, 255, 0.92);
+            display: none;
         }
 
         .feedback-box {
@@ -1063,6 +1168,9 @@
                 top: 14px;
                 left: 14px;
             }
+            .stage-side {
+                display: none;
+            }
             .student-toggle {
                 min-width: 118px;
                 padding: 12px 14px 12px 30px;
@@ -1148,6 +1256,21 @@
                     </div>
                 </div>
             </div>
+
+            <section class="stage-side stage-side-left glass-panel">
+                <div class="stage-side-kicker">训练内容</div>
+                <div class="stage-mode-name" id="stage-mode-name">完整立定跳远</div>
+                <div class="stage-drill-list" id="stage-drill-list"></div>
+            </section>
+
+            <section class="stage-side stage-side-right glass-panel">
+                <div class="stage-side-kicker">训练控制</div>
+                <div class="stage-actions">
+                    <button id="stage-start-btn" class="primary" type="button" onclick="toggleTraining()">开始训练</button>
+                    <button id="stage-finish-btn" type="button" onclick="finishRound()" disabled>结束训练</button>
+                </div>
+                <div class="stage-status-copy">训练过程中不再显示阶段提示，只有未全身入镜或目标跑偏时才提醒。</div>
+            </section>
 
             <div class="teacher-dock">
                 <button id="teacher-toggle-btn" class="teacher-toggle-btn" type="button" onclick="toggleTeacherDrawer()">≡</button>
@@ -1362,6 +1485,7 @@
         const ctx = canvas.getContext('2d');
         const overlay = document.getElementById('overlay');
         const overlayText = document.getElementById('overlay-text');
+        const feedbackStage = document.getElementById('feedback-stage');
         const phaseBadge = document.getElementById('phase-badge');
         const feedbackMain = document.getElementById('feedback-main');
         const feedbackSub = document.getElementById('feedback-sub');
@@ -1371,8 +1495,12 @@
         const historyList = document.getElementById('history-list');
         const studentListContainer = document.getElementById('student-list-container');
         const startBtn = document.getElementById('start-btn');
+        const stageStartBtn = document.getElementById('stage-start-btn');
+        const stageFinishBtn = document.getElementById('stage-finish-btn');
         const modeSelect = document.getElementById('mode-select');
         const drillList = document.getElementById('drill-list');
+        const stageDrillList = document.getElementById('stage-drill-list');
+        const stageModeName = document.getElementById('stage-mode-name');
         const classNameInput = document.getElementById('class-name-input');
         const groupNameInput = document.getElementById('group-name-input');
         const sessionLabelInput = document.getElementById('session-label-input');
@@ -1528,6 +1656,8 @@
 
         function maybeSpeakFeedback(main, phase) {
             if (!app.training || phase === 'IDLE') return;
+            if (['PRELOAD', 'TAKEOFF', 'FLIGHT', 'LANDING'].includes(phase)) return;
+            if (/^(进入|已准备好|摆臂专项练习|预摆蹬伸专项|落地缓冲专项)/.test(main)) return;
             speakText(main, { kind: 'guidance' });
         }
 
@@ -1572,6 +1702,25 @@
 
         function showRoundSummaryCard() {
             roundSummaryCard.classList.add('is-visible');
+        }
+
+        function showFramingPrompt(main, sub) {
+            feedbackMain.textContent = main;
+            feedbackSub.textContent = sub;
+            feedbackStage.classList.add('is-visible');
+        }
+
+        function hideFramingPrompt() {
+            feedbackStage.classList.remove('is-visible');
+        }
+
+        function syncTrainingButtons() {
+            const training = app.training;
+            startBtn.textContent = training ? '暂停分析' : '开始分析';
+            startBtn.className = training ? 'danger' : 'primary';
+            stageStartBtn.textContent = training ? '暂停训练' : '开始训练';
+            stageStartBtn.className = training ? 'danger' : 'primary';
+            stageFinishBtn.disabled = !training;
         }
 
         function updateAudioPrefs() {
@@ -1925,6 +2074,13 @@
                     <span>${item.text}</span>
                 </div>
             `).join('');
+            stageModeName.textContent = currentModeLabel();
+            stageDrillList.innerHTML = drills.map(item => `
+                <div class="stage-drill-item">
+                    <strong>${item.title}</strong>
+                    <span>${item.text}</span>
+                </div>
+            `).join('');
         }
 
         function changeMode() {
@@ -2006,8 +2162,10 @@
             app.drillPhase = 'IDLE';
             app.drillFrames = 0;
             updateCounters();
+            syncTrainingButtons();
             if (!keepFeedback) {
                 hideRoundSummaryCard();
+                hideFramingPrompt();
                 updateFeedback('请侧身站立，保证全身入镜', '系统会按“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作。', 'IDLE');
                 renderRoundSummary();
             }
@@ -2421,12 +2579,11 @@
         function analyzeMotion(landmarks) {
             const features = extractFeatures(landmarks);
             if (!features) {
+                showFramingPrompt('请侧身站立，保证全身入镜', ISSUE_META.keypoint_lost.tip);
                 if (app.training) {
                     app.lowerBodyLossFrames += 1;
                     if (app.lowerBodyLossFrames > JUMP_CONFIG.maxLowerBodyLossFrames && app.attempt) {
                         recordFailure('keypoint_lost');
-                    } else {
-                        updateFeedback('请保持全身完整入镜', ISSUE_META.keypoint_lost.tip, app.phase === 'IDLE' ? 'IDLE' : 'READY');
                     }
                 }
                 app.prevHipX = null;
@@ -2439,7 +2596,7 @@
             if (!targetStatus.accepted) {
                 if (app.training) {
                     if (app.targetGraceFrames > JUMP_CONFIG.targetGraceFrames) {
-                        updateFeedback('请保持与镜头距离稳定', ISSUE_META.target_size_drift.tip, app.phase === 'IDLE' ? 'IDLE' : app.phase);
+                        showFramingPrompt('请保持与镜头距离稳定', ISSUE_META.target_size_drift.tip);
                         if (app.attempt) {
                             recordFailure('target_size_drift');
                         }
@@ -2447,6 +2604,7 @@
                 }
                 return;
             }
+            hideFramingPrompt();
             const stableFeatures = smoothFeatures(features);
             updateBaseline(stableFeatures);
             app.prevHipX = stableFeatures.hipMid.x;
@@ -2526,12 +2684,12 @@
             if (!app.ready) return;
             unlockAudio();
             app.training = !app.training;
-            startBtn.textContent = app.training ? '暂停分析' : '开始分析';
-            startBtn.className = app.training ? 'danger' : 'primary';
+            syncTrainingButtons();
             if (app.training) {
                 closeTeacherDrawer();
                 resetRound(false);
                 playTone('start');
+                hideFramingPrompt();
                 updateFeedback('请先站稳准备', '侧身站立，保持 1 秒稳定后再进入预摆。', 'IDLE');
                 speakText('开始练习，请先站稳准备。', { kind: 'guidance', force: true });
             } else {
@@ -2543,9 +2701,9 @@
             if (!app.round) return;
             if (app.training) {
                 app.training = false;
-                startBtn.textContent = '开始分析';
-                startBtn.className = 'primary';
+                syncTrainingButtons();
             }
+            hideFramingPrompt();
             renderRoundSummary();
             showRoundSummaryCard();
             saveRoundHistory();
@@ -2571,6 +2729,7 @@
                 resizeCanvas();
                 app.ready = true;
                 overlay.style.display = 'none';
+                hideFramingPrompt();
                 updateFeedback('请侧身站立，保证全身入镜', '开始分析后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
             } catch (error) {
                 console.error(error);
