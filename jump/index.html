@@ -382,6 +382,25 @@
         .panel h3 { font-size: 16px; }
 
         .muted { color: var(--muted); font-size: 13px; line-height: 1.5; }
+        .sync-status {
+            margin: 8px 0 0;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(36, 107, 255, 0.08);
+            color: #3156a9;
+        }
+        .sync-status.is-success {
+            background: rgba(31, 157, 85, 0.1);
+            color: #147145;
+        }
+        .sync-status.is-warning {
+            background: rgba(245, 158, 11, 0.12);
+            color: #9a6500;
+        }
+        .sync-status.is-error {
+            background: rgba(232, 93, 93, 0.1);
+            color: #b53939;
+        }
 
         .status-grid {
             display: grid;
@@ -628,6 +647,7 @@
             <section class="panel" style="min-height: 0; display: flex; flex-direction: column;">
                 <h3>学生历史</h3>
                 <p class="muted">每次结束本轮后，会保存当前学生的练习次数、主要问题和下一轮建议。</p>
+                <p class="muted sync-status" id="sync-status">云端同步：准备中。</p>
                 <div class="history" id="history-list"></div>
             </section>
         </aside>
@@ -636,6 +656,10 @@
     <script>
         const STORAGE_KEY = 'jump-gemini-phase-studio-v1';
         const AUDIO_PREFS_KEY = 'jump-gemini-audio-prefs-v1';
+        const SYNC_QUEUE_KEY = 'jump-gemini-sync-queue-v1';
+        const SUPABASE_URL = 'https://dmssegbmfnngigjiaqgv.supabase.co';
+        const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_n-sRBVrmElw3Lv0HU5e6uQ_rSfgklXe';
+        const SUPABASE_TABLE = 'jump_round_records';
         const REQUIRED_POINTS = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
         const CONNECTORS = [
             [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
@@ -765,6 +789,7 @@
         const studentToggle = document.getElementById('student-toggle');
         const studentNameHint = document.getElementById('student-name-hint');
         const studentNameInput = document.getElementById('student-name-input');
+        const syncStatusEl = document.getElementById('sync-status');
         const soundPanel = document.getElementById('sound-panel');
         const soundToggle = document.getElementById('sound-toggle');
         const soundEffectsToggle = document.getElementById('sound-effects-toggle');
@@ -779,6 +804,11 @@
             lastGuidanceText: '',
             lastGuidanceAt: 0,
             lastPraiseAt: 0
+        };
+        const syncState = {
+            queue: loadSyncQueue(),
+            flushing: false,
+            lastMessage: ''
         };
         const PRAISE_LINES = [
             '这次节奏很好，继续保持。',
@@ -948,6 +978,187 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(app.students));
         }
 
+        function loadSyncQueue() {
+            try {
+                const raw = localStorage.getItem(SYNC_QUEUE_KEY);
+                if (!raw) return [];
+                const parsed = JSON.parse(raw);
+                return Array.isArray(parsed) ? parsed : [];
+            } catch (error) {
+                console.warn('Failed to load sync queue', error);
+                return [];
+            }
+        }
+
+        function saveSyncQueue() {
+            localStorage.setItem(SYNC_QUEUE_KEY, JSON.stringify(syncState.queue));
+        }
+
+        function setSyncStatus(message, tone = '') {
+            syncState.lastMessage = message;
+            if (!syncStatusEl) return;
+            syncStatusEl.textContent = message;
+            syncStatusEl.className = `muted sync-status${tone ? ` is-${tone}` : ''}`;
+        }
+
+        function refreshSyncStatus() {
+            if (syncState.flushing) {
+                setSyncStatus(`云端同步：正在上传 ${syncState.queue.length} 条记录。`, 'warning');
+                return;
+            }
+            if (syncState.queue.length > 0) {
+                const online = navigator.onLine;
+                setSyncStatus(`云端同步：待上传 ${syncState.queue.length} 条记录。${online ? '网络已连接，稍后自动重试。' : '当前离线，恢复网络后会自动补传。'}`, 'warning');
+                return;
+            }
+            if (syncState.lastMessage) {
+                setSyncStatus(syncState.lastMessage, 'success');
+                return;
+            }
+            setSyncStatus('云端同步：已连接，新的训练总结会自动上传。', 'success');
+        }
+
+        function currentModeLabel() {
+            const option = modeSelect.options[modeSelect.selectedIndex];
+            return option ? option.textContent.trim() : currentMode();
+        }
+
+        function createRecordId() {
+            if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+            return `jump_${Date.now()}_${Math.random().toString(16).slice(2, 10)}`;
+        }
+
+        function buildRoundAnalysis() {
+            const successCount = app.round && Number.isFinite(app.round.successCount) ? app.round.successCount : 0;
+            const failedCount = app.round && Number.isFinite(app.round.failedCount) ? app.round.failedCount : 0;
+            const practiceCount = app.round && Number.isFinite(app.round.practiceCount) ? app.round.practiceCount : successCount + failedCount;
+            const topReasonsText = app.round ? buildTopReasonText(app.round.failReasons) : '';
+            const improvementText = app.round ? buildTopReasonText(app.round.improvementReasons) : '';
+            const suggestion = app.round ? pickSuggestion() : '动作整体较完整，下一轮继续保持。';
+            return {
+                practiceCount,
+                successCount,
+                failedCount,
+                topReasonsText,
+                improvementText,
+                suggestion,
+                summaryText: `本轮练习 ${practiceCount} 次，成功 ${successCount} 次，未成功 ${failedCount} 次。主要问题：${topReasonsText || '未发现明显失败原因'}。继续优化：${improvementText || '整体动作较完整'}。下一轮建议：${suggestion}`
+            };
+        }
+
+        function buildRoundRecord() {
+            const analysis = buildRoundAnalysis();
+            const savedAt = new Date();
+            return {
+                recordId: createRecordId(),
+                time: savedAt.toLocaleString(),
+                savedAt: savedAt.toISOString(),
+                studentName: app.currentStudent,
+                mode: currentMode(),
+                modeLabel: currentModeLabel(),
+                practiceCount: analysis.practiceCount,
+                successCount: analysis.successCount,
+                failedCount: analysis.failedCount,
+                topReasonsText: analysis.topReasonsText,
+                improvementText: analysis.improvementText,
+                suggestion: analysis.suggestion,
+                summaryText: analysis.summaryText,
+                syncStatus: 'pending',
+                source: 'jump-web'
+            };
+        }
+
+        function buildSupabasePayload(record) {
+            return {
+                record_id: record.recordId,
+                student_name: record.studentName || app.currentStudent,
+                mode: record.mode || currentMode(),
+                mode_label: record.modeLabel || currentModeLabel(),
+                practice_count: Number(record.practiceCount || 0),
+                success_count: Number(record.successCount || 0),
+                failed_count: Number(record.failedCount || 0),
+                top_reasons_text: record.topReasonsText || '',
+                improvement_text: record.improvementText || '',
+                summary_text: record.summaryText || '',
+                suggestion: record.suggestion || '',
+                saved_at: record.savedAt || new Date().toISOString(),
+                source: record.source || 'jump-web',
+                raw_record: record
+            };
+        }
+
+        async function uploadRecordToSupabase(record) {
+            const response = await fetch(`${SUPABASE_URL}/rest/v1/${SUPABASE_TABLE}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_PUBLISHABLE_KEY,
+                    'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+                    'Prefer': 'return=minimal'
+                },
+                body: JSON.stringify([buildSupabasePayload(record)])
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status} ${errorText}`);
+            }
+        }
+
+        async function flushSyncQueue() {
+            if (syncState.flushing || syncState.queue.length === 0) {
+                refreshSyncStatus();
+                return;
+            }
+            if (!navigator.onLine) {
+                refreshSyncStatus();
+                return;
+            }
+
+            syncState.flushing = true;
+            refreshSyncStatus();
+
+            try {
+                while (syncState.queue.length > 0) {
+                    const nextRecord = syncState.queue[0];
+                    await uploadRecordToSupabase(nextRecord);
+                    syncState.queue.shift();
+                    saveSyncQueue();
+                }
+                setSyncStatus('云端同步：最新训练总结已上传。', 'success');
+            } catch (error) {
+                console.warn('Failed to sync jump round records', error);
+                setSyncStatus(`云端同步失败：${error.message}。已保留待上传记录。`, 'error');
+            } finally {
+                syncState.flushing = false;
+                if (syncState.queue.length > 0 && !String(syncState.lastMessage || '').startsWith('云端同步失败')) {
+                    refreshSyncStatus();
+                }
+            }
+        }
+
+        function queueRoundRecord(record) {
+            syncState.queue.push(record);
+            saveSyncQueue();
+            refreshSyncStatus();
+            flushSyncQueue();
+        }
+
+        function renderHistoryItem(record) {
+            const practiceCount = Number.isFinite(record.practiceCount) ? record.practiceCount : (Number(record.successCount || 0) + Number(record.failedCount || 0));
+            const summaryLine = record.summaryText || `本轮练习 ${practiceCount || 0} 次，成功 ${record.successCount || 0} 次，未成功 ${record.failedCount || 0} 次。`;
+            const topReasonsText = record.topReasonsText || '本轮动作较完整';
+            const suggestion = record.suggestion || '继续保持当前节奏。';
+            return `
+                <div class="time">${record.time || ''}</div>
+                <div class="result">
+                    <strong>${summaryLine}</strong><br>
+                    主要分析：${topReasonsText}<br>
+                    训练建议：${suggestion}
+                </div>
+            `;
+        }
+
         function ensureCurrentStudent() {
             const names = Object.keys(app.students);
             if (!names.includes(app.currentStudent)) app.currentStudent = names[0];
@@ -1053,14 +1264,7 @@
             [...records].reverse().forEach(record => {
                 const div = document.createElement('div');
                 div.className = 'history-item';
-                div.innerHTML = `
-                    <div class="time">${record.time}</div>
-                    <div class="result">
-                        <strong>成功 ${record.successCount} 次，未成功 ${record.failedCount} 次</strong><br>
-                        主要原因：${record.topReasonsText || '本轮动作较完整'}<br>
-                        建议：${record.suggestion}
-                    </div>
-                `;
+                div.innerHTML = renderHistoryItem(record);
                 historyList.appendChild(div);
             });
         }
@@ -1423,9 +1627,11 @@
 
         function saveRoundHistory() {
             if (!app.round) return;
-            app.students[app.currentStudent].push({ time: new Date().toLocaleString(), successCount: app.round.successCount, failedCount: app.round.failedCount, topReasonsText: buildTopReasonText(app.round.failReasons), suggestion: pickSuggestion() });
+            const record = buildRoundRecord();
+            app.students[app.currentStudent].push(record);
             saveStudents();
             renderHistory();
+            queueRoundRecord(record);
         }
 
         function beginAttempt() {
@@ -1954,14 +2160,7 @@
             [...records].reverse().forEach(record => {
                 const div = document.createElement('div');
                 div.className = 'history-item';
-                div.innerHTML = `
-                    <div class="time">${record.time}</div>
-                    <div class="result">
-                        <strong>本轮练习 ${record.practiceCount || 0} 次</strong><br>
-                        主要指导：${record.topReasonsText || '本轮动作较完整'}<br>
-                        下一轮建议：${record.suggestion}
-                    </div>
-                `;
+                div.innerHTML = renderHistoryItem(record);
                 historyList.appendChild(div);
             });
         }
@@ -1978,23 +2177,26 @@
 
         function saveRoundHistory() {
             if (!app.round) return;
-            app.students[app.currentStudent].push({
-                time: new Date().toLocaleString(),
-                practiceCount: app.round.practiceCount,
-                topReasonsText: buildTopReasonText(app.round.failReasons) || buildTopReasonText(app.round.improvementReasons),
-                suggestion: pickSuggestion()
-            });
+            const record = buildRoundRecord();
+            app.students[app.currentStudent].push(record);
             saveStudents();
             renderHistory();
+            queueRoundRecord(record);
         }
 
         normalizePracticeUi();
         applyAudioPrefsToUi();
         app.currentStudent = Object.keys(app.students)[0];
         renderStudentOptions();
+        refreshSyncStatus();
+        window.addEventListener('online', flushSyncQueue);
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') flushSyncQueue();
+        });
         renderDrills();
         resetRound(false);
         initCamera();
+        setTimeout(() => flushSyncQueue(), 1200);
     </script>
 </body>
 </html>
