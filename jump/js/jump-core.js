@@ -254,8 +254,12 @@
     }
 
     function pickSuggestion(round, mode, issueMeta = ISSUE_META) {
+        const practiceCount = Number(round.practiceCount || 0);
+        const successCount = Number(round.successCount || 0);
+        if (practiceCount === 0) return '先点击开始训练，再完成至少一次有效动作。';
         const failTop = topReasonEntries(round.failReasons);
         if (failTop.length > 0) return issueMeta[failTop[0][0]].advice;
+        if (practiceCount > 0 && successCount === 0) return '先完成一次完整动作，再根据结果继续调整。';
         const improveTop = topReasonEntries(round.improvementReasons);
         if (improveTop.length > 0) return `已经完成动作，下一轮重点优化：${issueMeta[improveTop[0][0]].label}。`;
         if (mode === 'arms') return '继续练大臂后摆到前上摆的完整节奏。';
@@ -271,6 +275,12 @@
         const topReasonsText = buildTopReasonText(round.failReasons || {}, issueMeta);
         const improvementText = buildTopReasonText(round.improvementReasons || {}, issueMeta);
         const suggestion = pickSuggestion(round, mode, issueMeta);
+        let summaryText = `本轮练习 ${practiceCount} 次，成功 ${successCount} 次，未成功 ${failedCount} 次。主要问题：${topReasonsText || '未发现明显失败原因'}。继续优化：${improvementText || '整体动作较完整'}。下一轮建议：${suggestion}`;
+        if (practiceCount === 0) {
+            summaryText = '本轮尚未开始，暂无有效动作记录。先点击开始训练，再完成至少一次动作。';
+        } else if (successCount === 0) {
+            summaryText = `本轮已练习 ${practiceCount} 次，但还没有完成有效动作。主要问题：${topReasonsText || '先保证动作完整做出来'}。下一轮建议：${suggestion}`;
+        }
         return {
             practiceCount,
             successCount,
@@ -278,7 +288,7 @@
             topReasonsText,
             improvementText,
             suggestion,
-            summaryText: `本轮练习 ${practiceCount} 次，成功 ${successCount} 次，未成功 ${failedCount} 次。主要问题：${topReasonsText || '未发现明显失败原因'}。继续优化：${improvementText || '整体动作较完整'}。下一轮建议：${suggestion}`
+            summaryText
         };
     }
 
