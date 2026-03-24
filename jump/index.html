@@ -61,7 +61,6 @@
         }
 
         #video-layer {
-            object-fit: cover;
             transform: scaleX(-1);
             opacity: 0.9;
             filter: contrast(1.04) saturate(0.96) brightness(0.92);
@@ -1359,6 +1358,7 @@
 
         const video = document.getElementById('video-layer');
         const canvas = document.getElementById('draw-layer');
+        const stageEl = document.querySelector('.stage');
         const ctx = canvas.getContext('2d');
         const overlay = document.getElementById('overlay');
         const overlayText = document.getElementById('overlay-text');
@@ -1421,6 +1421,8 @@
                 submitStudentName();
             }
         });
+
+        video.addEventListener('loadedmetadata', resizeCanvas);
 
         function normalizePracticeUi() {
             if (titleChip) titleChip.textContent = '立定跳远课堂版';
@@ -1940,8 +1942,32 @@
         }
 
         function resizeCanvas() {
-            canvas.width = video.clientWidth || canvas.width;
-            canvas.height = video.clientHeight || canvas.height;
+            const stageWidth = stageEl ? stageEl.clientWidth : window.innerWidth;
+            const stageHeight = stageEl ? stageEl.clientHeight : window.innerHeight;
+            const sourceWidth = video.videoWidth || 640;
+            const sourceHeight = video.videoHeight || 480;
+            const aspect = sourceWidth / Math.max(sourceHeight, 1);
+            let width = stageWidth;
+            let height = width / aspect;
+
+            if (height > stageHeight) {
+                height = stageHeight;
+                width = height * aspect;
+            }
+
+            const left = (stageWidth - width) / 2;
+            const top = (stageHeight - height) / 2;
+            [video, canvas].forEach(element => {
+                element.style.right = 'auto';
+                element.style.bottom = 'auto';
+                element.style.left = `${left}px`;
+                element.style.top = `${top}px`;
+                element.style.width = `${width}px`;
+                element.style.height = `${height}px`;
+            });
+
+            canvas.width = Math.round(width);
+            canvas.height = Math.round(height);
         }
 
         window.addEventListener('resize', resizeCanvas);
