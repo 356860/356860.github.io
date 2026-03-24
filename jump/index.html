@@ -443,6 +443,48 @@
             gap: 10px;
         }
 
+        .meta-panel {
+            display: grid;
+            gap: 10px;
+        }
+
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .meta-field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .meta-field label {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--muted);
+        }
+
+        .meta-field input {
+            width: 100%;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: var(--text);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .meta-field input:focus {
+            border-color: rgba(36, 107, 255, 0.45);
+            box-shadow: 0 0 0 4px rgba(36, 107, 255, 0.12);
+        }
+
+        .meta-hint {
+            margin: 0;
+        }
+
         .mode-panel select {
             border: 1px solid var(--line);
             background: #fff;
@@ -540,6 +582,7 @@
             body { overflow: auto; }
             .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
             .stage { min-height: 54vh; }
+            .meta-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -620,6 +663,27 @@
             </section>
 
             <section class="panel">
+                <h3>课堂信息</h3>
+                <div class="meta-panel">
+                    <div class="meta-grid">
+                        <div class="meta-field">
+                            <label for="class-name-input">班级</label>
+                            <input id="class-name-input" type="text" maxlength="30" placeholder="例如：三年级二班" onchange="updateSessionMeta()" onblur="updateSessionMeta()">
+                        </div>
+                        <div class="meta-field">
+                            <label for="group-name-input">小组</label>
+                            <input id="group-name-input" type="text" maxlength="30" placeholder="例如：第一组" onchange="updateSessionMeta()" onblur="updateSessionMeta()">
+                        </div>
+                        <div class="meta-field">
+                            <label for="session-label-input">课次</label>
+                            <input id="session-label-input" type="text" maxlength="40" placeholder="例如：2026-03-24 上午课" onchange="updateSessionMeta()" onblur="updateSessionMeta()">
+                        </div>
+                    </div>
+                    <p class="muted meta-hint">这些信息会写入每次训练总结，后面做大屏和分组统计时直接可用。</p>
+                </div>
+            </section>
+
+            <section class="panel">
                 <h2>实时反馈</h2>
                 <div class="phase-badge" id="phase-badge">阶段：待机</div>
                 <div class="feedback-box">
@@ -657,6 +721,7 @@
         const STORAGE_KEY = 'jump-gemini-phase-studio-v1';
         const AUDIO_PREFS_KEY = 'jump-gemini-audio-prefs-v1';
         const SYNC_QUEUE_KEY = 'jump-gemini-sync-queue-v1';
+        const SESSION_META_KEY = 'jump-gemini-session-meta-v1';
         const SUPABASE_URL = 'https://dmssegbmfnngigjiaqgv.supabase.co';
         const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_n-sRBVrmElw3Lv0HU5e6uQ_rSfgklXe';
         const SUPABASE_TABLE = 'jump_round_records';
@@ -785,6 +850,9 @@
         const startBtn = document.getElementById('start-btn');
         const modeSelect = document.getElementById('mode-select');
         const drillList = document.getElementById('drill-list');
+        const classNameInput = document.getElementById('class-name-input');
+        const groupNameInput = document.getElementById('group-name-input');
+        const sessionLabelInput = document.getElementById('session-label-input');
         const studentPanel = document.getElementById('student-panel');
         const studentToggle = document.getElementById('student-toggle');
         const studentNameHint = document.getElementById('student-name-hint');
@@ -810,6 +878,7 @@
             flushing: false,
             lastMessage: ''
         };
+        const sessionMeta = loadSessionMeta();
         const PRAISE_LINES = [
             '这次节奏很好，继续保持。',
             '动作越来越连贯了。',
@@ -978,6 +1047,57 @@
             localStorage.setItem(STORAGE_KEY, JSON.stringify(app.students));
         }
 
+        function createDefaultSessionLabel() {
+            const now = new Date();
+            const dateText = new Intl.DateTimeFormat('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(now).replace(/\//g, '-');
+            const dayPart = now.getHours() < 12 ? '上午课' : '下午课';
+            return `${dateText} ${dayPart}`;
+        }
+
+        function loadSessionMeta() {
+            const fallback = {
+                className: '',
+                groupName: '',
+                sessionLabel: createDefaultSessionLabel()
+            };
+            try {
+                const raw = localStorage.getItem(SESSION_META_KEY);
+                if (!raw) return fallback;
+                const parsed = JSON.parse(raw);
+                return {
+                    className: typeof parsed.className === 'string' ? parsed.className : '',
+                    groupName: typeof parsed.groupName === 'string' ? parsed.groupName : '',
+                    sessionLabel: typeof parsed.sessionLabel === 'string' && parsed.sessionLabel.trim() ? parsed.sessionLabel : fallback.sessionLabel
+                };
+            } catch (error) {
+                console.warn('Failed to load session meta', error);
+                return fallback;
+            }
+        }
+
+        function saveSessionMeta() {
+            localStorage.setItem(SESSION_META_KEY, JSON.stringify(sessionMeta));
+        }
+
+        function applySessionMetaToUi() {
+            if (classNameInput) classNameInput.value = sessionMeta.className || '';
+            if (groupNameInput) groupNameInput.value = sessionMeta.groupName || '';
+            if (sessionLabelInput) sessionLabelInput.value = sessionMeta.sessionLabel || '';
+        }
+
+        function updateSessionMeta() {
+            sessionMeta.className = (classNameInput.value || '').trim();
+            sessionMeta.groupName = (groupNameInput.value || '').trim();
+            sessionMeta.sessionLabel = (sessionLabelInput.value || '').trim() || createDefaultSessionLabel();
+            if (!sessionLabelInput.value.trim()) sessionLabelInput.value = sessionMeta.sessionLabel;
+            saveSessionMeta();
+            refreshSyncStatus();
+        }
+
         function loadSyncQueue() {
             try {
                 const raw = localStorage.getItem(SYNC_QUEUE_KEY);
@@ -1054,6 +1174,9 @@
                 time: savedAt.toLocaleString(),
                 savedAt: savedAt.toISOString(),
                 studentName: app.currentStudent,
+                className: sessionMeta.className || '',
+                groupName: sessionMeta.groupName || '',
+                sessionLabel: sessionMeta.sessionLabel || createDefaultSessionLabel(),
                 mode: currentMode(),
                 modeLabel: currentModeLabel(),
                 practiceCount: analysis.practiceCount,
@@ -1072,6 +1195,9 @@
             return {
                 record_id: record.recordId,
                 student_name: record.studentName || app.currentStudent,
+                class_name: record.className || '',
+                group_name: record.groupName || '',
+                session_label: record.sessionLabel || createDefaultSessionLabel(),
                 mode: record.mode || currentMode(),
                 mode_label: record.modeLabel || currentModeLabel(),
                 practice_count: Number(record.practiceCount || 0),
@@ -1149,8 +1275,10 @@
             const summaryLine = record.summaryText || `本轮练习 ${practiceCount || 0} 次，成功 ${record.successCount || 0} 次，未成功 ${record.failedCount || 0} 次。`;
             const topReasonsText = record.topReasonsText || '本轮动作较完整';
             const suggestion = record.suggestion || '继续保持当前节奏。';
+            const tags = [record.className, record.groupName, record.sessionLabel].filter(Boolean).join(' / ');
             return `
                 <div class="time">${record.time || ''}</div>
+                ${tags ? `<div class="time">${tags}</div>` : ''}
                 <div class="result">
                     <strong>${summaryLine}</strong><br>
                     主要分析：${topReasonsText}<br>
@@ -2186,6 +2314,7 @@
 
         normalizePracticeUi();
         applyAudioPrefsToUi();
+        applySessionMetaToUi();
         app.currentStudent = Object.keys(app.students)[0];
         renderStudentOptions();
         refreshSyncStatus();
