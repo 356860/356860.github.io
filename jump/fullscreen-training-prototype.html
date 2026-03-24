@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>跳远全屏训练原型</title>
+    <style>
+        :root {
+            --bg-a: #081223;
+            --bg-b: #102542;
+            --glass: rgba(255, 255, 255, 0.12);
+            --glass-strong: rgba(255, 255, 255, 0.18);
+            --line: rgba(255, 255, 255, 0.16);
+            --text: #eef4ff;
+            --muted: rgba(230, 238, 255, 0.72);
+            --accent: #7dd3fc;
+            --accent-strong: #38bdf8;
+            --success: #4ade80;
+            --warn: #facc15;
+            --danger: #fb7185;
+            --shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+            background:
+                radial-gradient(circle at 18% 18%, rgba(56, 189, 248, 0.24), transparent 28%),
+                radial-gradient(circle at 82% 14%, rgba(125, 211, 252, 0.2), transparent 24%),
+                linear-gradient(160deg, var(--bg-a) 0%, var(--bg-b) 100%);
+            color: var(--text);
+        }
+
+        body::before,
+        body::after {
+            content: "";
+            position: fixed;
+            inset: auto;
+            width: 38vw;
+            height: 38vw;
+            border-radius: 999px;
+            filter: blur(60px);
+            opacity: 0.22;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        body::before {
+            left: -8vw;
+            bottom: -10vw;
+            background: rgba(56, 189, 248, 0.36);
+        }
+
+        body::after {
+            right: -10vw;
+            top: -12vw;
+            background: rgba(99, 102, 241, 0.26);
+        }
+
+        .app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            isolation: isolate;
+        }
+
+        .stage {
+            position: absolute;
+            inset: 0;
+            overflow: hidden;
+        }
+
+        .stage::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background:
+                linear-gradient(180deg, rgba(5, 10, 20, 0.18) 0%, rgba(5, 10, 20, 0.5) 100%),
+                radial-gradient(circle at center, rgba(255, 255, 255, 0.07), transparent 52%);
+            z-index: 1;
+        }
+
+        .stage-grid {
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+            background-size: 72px 72px;
+            opacity: 0.18;
+        }
+
+        .track {
+            position: absolute;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            z-index: 0;
+        }
+
+        .track::before {
+            content: "";
+            position: absolute;
+            width: min(76vw, 1200px);
+            height: min(76vh, 760px);
+            border-radius: 40px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background:
+                linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02)),
+                rgba(7, 16, 32, 0.24);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .track::after {
+            content: "";
+            position: absolute;
+            width: min(68vw, 1080px);
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            bottom: 18vh;
+        }
+
+        .athlete {
+            position: relative;
+            width: min(30vw, 360px);
+            height: min(62vh, 680px);
+            z-index: 2;
+            filter: drop-shadow(0 18px 40px rgba(0, 0, 0, 0.34));
+        }
+
+        .athlete svg {
+            width: 100%;
+            height: 100%;
+            opacity: 0.95;
+        }
+
+        .glass {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.08));
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+
+        .top-left,
+        .top-right,
+        .mid-prompt,
+        .teacher-button,
+        .result-card,
+        .round-sheet,
+        .drawer {
+            position: absolute;
+            z-index: 4;
+        }
+
+        .top-left {
+            top: 22px;
+            left: 22px;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            border-radius: 999px;
+        }
+
+        .student-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            background: var(--success);
+            box-shadow: 0 0 16px rgba(74, 222, 128, 0.8);
+        }
+
+        .student-name {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+        }
+
+        .student-sub {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .top-right {
+            top: 22px;
+            right: 22px;
+            padding: 14px 18px 12px;
+            min-width: 142px;
+            border-radius: 26px;
+            text-align: right;
+        }
+
+        .counter-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.72);
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+        }
+
+        .counter-value {
+            font-size: clamp(40px, 7vw, 64px);
+            line-height: 0.95;
+            font-weight: 800;
+            color: rgba(255, 255, 255, 0.88);
+            text-shadow: 0 8px 28px rgba(56, 189, 248, 0.28);
+        }
+
+        .counter-sync {
+            margin-top: 6px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .mid-prompt {
+            left: 50%;
+            bottom: 14vh;
+            transform: translateX(-50%);
+            width: min(72vw, 820px);
+            text-align: center;
+            padding: 22px 26px;
+            border-radius: 30px;
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .mid-prompt.hidden {
+            opacity: 0;
+            transform: translateX(-50%) translateY(16px);
+            pointer-events: none;
+        }
+
+        .prompt-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 12px;
+            border-radius: 999px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #fff;
+            background: rgba(15, 23, 42, 0.34);
+        }
+
+        .prompt-title {
+            font-size: clamp(24px, 3.4vw, 44px);
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: 0.02em;
+        }
+
+        .prompt-sub {
+            margin-top: 8px;
+            font-size: 16px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .teacher-button {
+            right: 22px;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+
+        .teacher-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 54px;
+            height: 54px;
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            background: rgba(10, 16, 28, 0.26);
+            color: #fff;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+        }
+
+        .drawer-backdrop {
+            position: absolute;
+            inset: 0;
+            z-index: 5;
+            background: rgba(3, 7, 18, 0.38);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.24s ease;
+        }
+
+        .drawer-backdrop.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .drawer {
+            top: 18px;
+            right: 18px;
+            bottom: 18px;
+            width: min(380px, calc(100vw - 36px));
+            padding: 18px;
+            border-radius: 28px;
+            transform: translateX(calc(100% + 36px));
+            transition: transform 0.28s ease;
+            display: grid;
+            grid-template-rows: auto auto auto 1fr;
+            gap: 14px;
+            background:
+                linear-gradient(180deg, rgba(12, 22, 40, 0.9), rgba(12, 22, 40, 0.82)),
+                rgba(9, 17, 32, 0.78);
+        }
+
+        .drawer.open {
+            transform: translateX(0);
+        }
+
+        .drawer-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .drawer-title {
+            font-size: 22px;
+            font-weight: 800;
+        }
+
+        .drawer-close {
+            border: 0;
+            width: 38px;
+            height: 38px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font-size: 22px;
+            cursor: pointer;
+        }
+
+        .panel {
+            border-radius: 22px;
+            padding: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .panel h3 {
+            margin: 0 0 12px;
+            font-size: 16px;
+        }
+
+        .panel .sub {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .field-grid {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: 1fr;
+        }
+
+        .field {
+            display: grid;
+            gap: 6px;
+        }
+
+        .field-row {
+            display: grid;
+            gap: 10px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .field label {
+            font-size: 12px;
+            font-weight: 700;
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 11px 12px;
+            font: inherit;
+            color: #fff;
+            background: rgba(255, 255, 255, 0.06);
+            outline: none;
+        }
+
+        .drawer-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .drawer-actions button {
+            flex: 1 1 120px;
+            min-height: 44px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            font: inherit;
+            font-weight: 700;
+            color: #fff;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .drawer-actions .primary {
+            background: linear-gradient(180deg, rgba(56, 189, 248, 0.92), rgba(14, 165, 233, 0.86));
+            border-color: rgba(125, 211, 252, 0.4);
+        }
+
+        .insight-list {
+            display: grid;
+            gap: 10px;
+            align-content: start;
+            overflow: auto;
+        }
+
+        .insight-card {
+            border-radius: 18px;
+            padding: 14px 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .insight-kicker {
+            font-size: 11px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.58);
+            margin-bottom: 8px;
+        }
+
+        .insight-main {
+            font-size: 15px;
+            font-weight: 700;
+            line-height: 1.55;
+        }
+
+        .insight-sub {
+            margin-top: 6px;
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.6;
+        }
+
+        .result-card {
+            left: 50%;
+            bottom: 24px;
+            transform: translateX(-50%) translateY(140%);
+            width: min(540px, calc(100vw - 30px));
+            padding: 20px;
+            border-radius: 28px;
+            transition: transform 0.28s ease;
+        }
+
+        .result-card.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .result-title {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 12px;
+        }
+
+        .result-line {
+            font-size: 15px;
+            line-height: 1.7;
+            color: var(--muted);
+        }
+
+        .result-line strong {
+            color: #fff;
+        }
+
+        .round-sheet {
+            inset: auto 24px 24px auto;
+            width: min(460px, calc(100vw - 48px));
+            padding: 22px;
+            border-radius: 28px;
+            transform: translateY(calc(100% + 24px));
+            transition: transform 0.28s ease;
+        }
+
+        .round-sheet.show {
+            transform: translateY(0);
+        }
+
+        .sheet-title {
+            font-size: 28px;
+            font-weight: 800;
+            margin-bottom: 14px;
+        }
+
+        .sheet-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .sheet-metric {
+            padding: 14px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .sheet-metric small {
+            display: block;
+            color: rgba(255, 255, 255, 0.6);
+            margin-bottom: 6px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .sheet-metric strong {
+            font-size: 26px;
+        }
+
+        .sheet-block {
+            margin-top: 12px;
+            border-radius: 18px;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .sheet-block h4 {
+            margin: 0 0 8px;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: rgba(255, 255, 255, 0.62);
+        }
+
+        .sheet-block p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.7;
+            font-size: 14px;
+        }
+
+        .sheet-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .sheet-actions button {
+            flex: 1;
+            min-height: 46px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .sheet-actions .primary {
+            background: linear-gradient(180deg, rgba(74, 222, 128, 0.9), rgba(34, 197, 94, 0.84));
+            border-color: rgba(134, 239, 172, 0.34);
+        }
+
+        @media (max-width: 960px) {
+            .athlete {
+                width: min(56vw, 360px);
+                height: min(58vh, 620px);
+            }
+
+            .teacher-button {
+                right: 16px;
+                bottom: 16px;
+                top: auto;
+                transform: none;
+            }
+
+            .drawer {
+                top: auto;
+                right: 0;
+                left: 0;
+                bottom: 0;
+                width: 100%;
+                max-height: min(72vh, 680px);
+                border-radius: 28px 28px 0 0;
+                transform: translateY(calc(100% + 24px));
+                grid-template-rows: auto auto 1fr;
+            }
+
+            .drawer.open {
+                transform: translateY(0);
+            }
+
+            .field-row {
+                grid-template-columns: 1fr;
+            }
+
+            .mid-prompt {
+                bottom: 104px;
+                width: calc(100vw - 28px);
+                padding: 18px 18px 20px;
+            }
+
+            .top-left {
+                top: 14px;
+                left: 14px;
+                max-width: calc(100vw - 160px);
+            }
+
+            .top-right {
+                top: 14px;
+                right: 14px;
+                min-width: 116px;
+                padding: 10px 12px;
+                border-radius: 20px;
+            }
+
+            .counter-value {
+                font-size: 42px;
+            }
+
+            .round-sheet {
+                left: 14px;
+                right: 14px;
+                bottom: 88px;
+                width: auto;
+            }
+
+            .sheet-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <section class="stage">
+            <div class="stage-grid"></div>
+            <div class="track">
+                <div class="athlete" aria-hidden="true">
+                    <svg viewBox="0 0 220 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="108" cy="56" r="26" fill="rgba(226, 232, 240, 0.96)"/>
+                        <path d="M107 88L108 168" stroke="rgba(236, 245, 255, 0.96)" stroke-width="12" stroke-linecap="round"/>
+                        <path d="M108 110L60 170" stroke="rgba(125, 211, 252, 0.95)" stroke-width="11" stroke-linecap="round"/>
+                        <path d="M108 114L156 176" stroke="rgba(125, 211, 252, 0.95)" stroke-width="11" stroke-linecap="round"/>
+                        <path d="M108 168L72 256" stroke="rgba(236, 245, 255, 0.96)" stroke-width="12" stroke-linecap="round"/>
+                        <path d="M108 168L146 264" stroke="rgba(236, 245, 255, 0.96)" stroke-width="12" stroke-linecap="round"/>
+                        <path d="M72 256L56 356" stroke="rgba(236, 245, 255, 0.96)" stroke-width="12" stroke-linecap="round"/>
+                        <path d="M146 264L166 362" stroke="rgba(236, 245, 255, 0.96)" stroke-width="12" stroke-linecap="round"/>
+                        <path d="M52 360L98 360" stroke="rgba(125, 211, 252, 0.88)" stroke-width="10" stroke-linecap="round"/>
+                        <path d="M164 365L206 365" stroke="rgba(125, 211, 252, 0.88)" stroke-width="10" stroke-linecap="round"/>
+                        <circle cx="108" cy="168" r="9" fill="rgba(125, 211, 252, 1)"/>
+                        <circle cx="72" cy="256" r="8" fill="rgba(125, 211, 252, 1)"/>
+                        <circle cx="146" cy="264" r="8" fill="rgba(125, 211, 252, 1)"/>
+                    </svg>
+                </div>
+            </div>
+
+            <div class="glass top-left">
+                <span class="student-dot"></span>
+                <div>
+                    <div class="student-name" id="student-name">张同学</div>
+                    <div class="student-sub" id="student-sub">完整立定跳远 / 训练中</div>
+                </div>
+            </div>
+
+            <div class="glass top-right">
+                <div class="counter-label">练习次数</div>
+                <div class="counter-value" id="counter-value">12</div>
+                <div class="counter-sync" id="counter-sync">已同步</div>
+            </div>
+
+            <div class="glass mid-prompt" id="prompt-panel">
+                <div class="prompt-tag" id="prompt-tag">动作提示</div>
+                <div class="prompt-title" id="prompt-title">继续预摆，节奏再完整一点</div>
+                <div class="prompt-sub" id="prompt-sub">训练中只保留一条最关键的提示，帮助学生把注意力放回动作本身。</div>
+            </div>
+
+            <div class="teacher-button">
+                <button type="button" class="teacher-toggle" id="teacher-toggle" aria-label="打开教师菜单">≡</button>
+            </div>
+
+            <div class="drawer-backdrop" id="drawer-backdrop"></div>
+
+            <aside class="glass drawer" id="teacher-drawer">
+                <div class="drawer-head">
+                    <div class="drawer-title">教师菜单</div>
+                    <button type="button" class="drawer-close" id="drawer-close" aria-label="关闭菜单">×</button>
+                </div>
+
+                <section class="panel">
+                    <h3>训练设置</h3>
+                    <div class="field-grid">
+                        <div class="field">
+                            <label for="mode-select">训练项目</label>
+                            <select id="mode-select">
+                                <option>完整立定跳远</option>
+                                <option>摆臂专项</option>
+                                <option>预摆蹬伸专项</option>
+                                <option>落地缓冲专项</option>
+                            </select>
+                        </div>
+                        <div class="drawer-actions">
+                            <button type="button" class="primary" id="demo-prompt-btn">演示训练中提示</button>
+                            <button type="button" id="demo-result-btn">演示单次结束</button>
+                            <button type="button" id="demo-round-btn">演示本轮总结</button>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h3>课堂信息</h3>
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="class-input">班级</label>
+                            <input id="class-input" type="text" value="三年级二班">
+                        </div>
+                        <div class="field">
+                            <label for="group-input">小组</label>
+                            <input id="group-input" type="text" value="第二组">
+                        </div>
+                        <div class="field">
+                            <label for="session-input">课次</label>
+                            <input id="session-input" type="text" value="2026-03-24 第1节课">
+                        </div>
+                    </div>
+                    <p class="sub">训练时不显示这些输入框，默认收进教师抽屉，保证学生视线只面对动作和提示。</p>
+                </section>
+
+                <section class="panel insight-list">
+                    <div class="insight-card">
+                        <div class="insight-kicker">本轮回顾</div>
+                        <div class="insight-main">成功 4 次，未成功 1 次</div>
+                        <div class="insight-sub">高频问题：预摆不足。继续优化：摆臂不积极。建议下一轮先做 3 次慢预摆，再恢复完整起跳。</div>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-kicker">显示原则</div>
+                        <div class="insight-main">训练中只显示短提示或激励，不显示长段分析。</div>
+                        <div class="insight-sub">单次完成后给轻结果卡，本轮结束后再看完整总结。这样最不打断动作节奏。</div>
+                    </div>
+                    <div class="insight-card">
+                        <div class="insight-kicker">同步状态</div>
+                        <div class="insight-main">最新记录已上传</div>
+                        <div class="insight-sub">后续可在这里继续放历史记录、QuickForm 上传状态、排行榜入口。</div>
+                    </div>
+                </section>
+            </aside>
+
+            <section class="glass result-card" id="attempt-card">
+                <div class="result-title">本次完成</div>
+                <div class="result-line"><strong>主要问题：</strong><span id="attempt-problem">预摆不足</span></div>
+                <div class="result-line"><strong>训练建议：</strong><span id="attempt-advice">先慢预摆 3 次，再恢复完整起跳。</span></div>
+            </section>
+
+            <section class="glass round-sheet" id="round-sheet">
+                <div class="sheet-title">本轮总结</div>
+                <div class="sheet-grid">
+                    <div class="sheet-metric">
+                        <small>练习</small>
+                        <strong id="sheet-count">12</strong>
+                    </div>
+                    <div class="sheet-metric">
+                        <small>成功率</small>
+                        <strong id="sheet-rate">83%</strong>
+                    </div>
+                </div>
+                <div class="sheet-block">
+                    <h4>高频问题</h4>
+                    <p id="sheet-issue">预摆不足，起跳前节奏还不够完整。</p>
+                </div>
+                <div class="sheet-block">
+                    <h4>下一轮建议</h4>
+                    <p id="sheet-suggestion">先做 3 次慢预摆，确认膝髋共同下沉后，再做完整立定跳远。</p>
+                </div>
+                <div class="sheet-actions">
+                    <button type="button" id="close-round-btn">先收起</button>
+                    <button type="button" class="primary" id="next-round-btn">开始下一轮</button>
+                </div>
+            </section>
+        </section>
+    </div>
+
+    <script>
+        const state = {
+            count: 12,
+            promptIndex: 0,
+            training: true,
+            drawerOpen: false
+        };
+
+        const promptPool = [
+            {
+                tag: '动作提示',
+                title: '继续预摆，节奏再完整一点',
+                sub: '训练中只保留一条最关键的提示，帮助学生把注意力放回动作本身。'
+            },
+            {
+                tag: '即时纠错',
+                title: '起跳更快一点，别停顿',
+                sub: '如果动作被拆断，只给最短纠错语，不把长分析堆到主画面。'
+            },
+            {
+                tag: '激励反馈',
+                title: '很好，这次更连贯了',
+                sub: '当动作接近标准时，用短鼓励替代复杂说明，保护训练节奏。'
+            }
+        ];
+
+        const promptPanel = document.getElementById('prompt-panel');
+        const promptTag = document.getElementById('prompt-tag');
+        const promptTitle = document.getElementById('prompt-title');
+        const promptSub = document.getElementById('prompt-sub');
+        const counterValue = document.getElementById('counter-value');
+        const counterSync = document.getElementById('counter-sync');
+        const studentSub = document.getElementById('student-sub');
+        const drawer = document.getElementById('teacher-drawer');
+        const drawerBackdrop = document.getElementById('drawer-backdrop');
+        const teacherToggle = document.getElementById('teacher-toggle');
+        const drawerClose = document.getElementById('drawer-close');
+        const attemptCard = document.getElementById('attempt-card');
+        const roundSheet = document.getElementById('round-sheet');
+        const attemptProblem = document.getElementById('attempt-problem');
+        const attemptAdvice = document.getElementById('attempt-advice');
+
+        function renderCounter() {
+            counterValue.textContent = state.count;
+        }
+
+        function renderPrompt(index) {
+            const item = promptPool[index % promptPool.length];
+            promptTag.textContent = item.tag;
+            promptTitle.textContent = item.title;
+            promptSub.textContent = item.sub;
+            promptPanel.classList.remove('hidden');
+        }
+
+        function setDrawer(open) {
+            state.drawerOpen = open;
+            drawer.classList.toggle('open', open);
+            drawerBackdrop.classList.toggle('show', open);
+        }
+
+        function showAttemptCard(problem, advice) {
+            attemptProblem.textContent = problem;
+            attemptAdvice.textContent = advice;
+            attemptCard.classList.add('show');
+            window.clearTimeout(showAttemptCard.timer);
+            showAttemptCard.timer = window.setTimeout(() => {
+                attemptCard.classList.remove('show');
+            }, 2200);
+        }
+
+        function showRoundSheet() {
+            roundSheet.classList.add('show');
+            counterSync.textContent = '总结已生成';
+            studentSub.textContent = '完整立定跳远 / 本轮结束';
+        }
+
+        function hideRoundSheet() {
+            roundSheet.classList.remove('show');
+            counterSync.textContent = '已同步';
+            studentSub.textContent = '完整立定跳远 / 训练中';
+        }
+
+        teacherToggle.addEventListener('click', () => setDrawer(true));
+        drawerClose.addEventListener('click', () => setDrawer(false));
+        drawerBackdrop.addEventListener('click', () => setDrawer(false));
+
+        document.getElementById('demo-prompt-btn').addEventListener('click', () => {
+            state.promptIndex += 1;
+            renderPrompt(state.promptIndex);
+            hideRoundSheet();
+            attemptCard.classList.remove('show');
+        });
+
+        document.getElementById('demo-result-btn').addEventListener('click', () => {
+            state.count += 1;
+            renderCounter();
+            renderPrompt(2);
+            showAttemptCard('预摆不足', '先慢预摆 3 次，再恢复完整起跳。');
+            counterSync.textContent = '待上传';
+            window.setTimeout(() => {
+                counterSync.textContent = '已同步';
+            }, 1800);
+        });
+
+        document.getElementById('demo-round-btn').addEventListener('click', () => {
+            showRoundSheet();
+            setDrawer(false);
+        });
+
+        document.getElementById('close-round-btn').addEventListener('click', hideRoundSheet);
+        document.getElementById('next-round-btn').addEventListener('click', () => {
+            hideRoundSheet();
+            renderPrompt(0);
+        });
+
+        renderCounter();
+        renderPrompt(0);
+    </script>
+</body>
+</html>
