@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jump Student Mode</title>
+    <style>
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at top left, rgba(70, 130, 255, 0.18), transparent 28%),
+                radial-gradient(circle at bottom right, rgba(255, 255, 255, 0.08), transparent 26%),
+                linear-gradient(180deg, #091320 0%, #0b1a30 52%, #08121d 100%);
+            font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            display: grid;
+            place-items: stretch;
+        }
+
+        #student-app-frame {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            background: transparent;
+        }
+
+        .loading-shell {
+            position: fixed;
+            inset: 0;
+            display: grid;
+            place-items: center;
+            pointer-events: none;
+            color: rgba(255, 255, 255, 0.72);
+            font-size: 16px;
+            letter-spacing: 0.5px;
+        }
+    </style>
+</head>
+<body>
+    <iframe
+        id="student-app-frame"
+        src="./index.html"
+        allow="camera; microphone; autoplay; fullscreen"
+        referrerpolicy="strict-origin-when-cross-origin"></iframe>
+    <div class="loading-shell" id="loading-shell">Loading student mode...</div>
+
+    <script>
+        const TEXT = {
+            loading: "\u6b63\u5728\u8f7d\u5165\u5b66\u751f\u7aef\u8bad\u7ec3\u754c\u9762\u2026",
+            loadingFailed: "\u8f7d\u5165\u5931\u8d25\uff1a",
+            coachKicker: "\u5b9e\u65f6\u6307\u5bfc",
+            startHintTitle: "\u70b9\u51fb\u53f3\u4e0a\u5f00\u59cb",
+            startHintSub: "\u5f00\u59cb\u8bad\u7ec3\u540e\uff0c\u8fd9\u91cc\u53ea\u663e\u793a\u5f53\u524d\u6700\u5173\u952e\u7684\u4e00\u6761\u52a8\u4f5c\u6307\u5bfc\u6216\u4e0b\u4e00\u6b65\u5efa\u8bae\u3002",
+            start: "\u5f00\u59cb",
+            finish: "\u7ed3\u675f",
+            startTraining: "\u5f00\u59cb\u8bad\u7ec3",
+            finishTraining: "\u7ed3\u675f\u8bad\u7ec3",
+            taskKicker: "\u52a8\u4f5c\u987a\u5e8f",
+            taskChain: "\u52a8\u4f5c\u94fe",
+            controlTitle: "\u603b\u63a7\u53f0",
+            controlSubtitle: "\u5b66\u751f\u8bad\u7ec3\u65f6\u4e3b\u754c\u9762\u53ea\u4fdd\u7559\u5173\u952e\u4fe1\u606f\uff0c\u8fd9\u91cc\u8d1f\u8d23\u8bbe\u7f6e\u548c\u8bb0\u5f55\u3002",
+            classInfo: "\u8bfe\u5802\u4fe1\u606f",
+            history: "\u5b66\u751f\u5386\u53f2",
+            noRoundYet: "\u672c\u8f6e\u5c1a\u672a\u5f00\u59cb",
+            noRoundYetSub: "\u8fd8\u6ca1\u6709\u6709\u6548\u52a8\u4f5c\u8bb0\u5f55\u3002\u5148\u70b9\u51fb\u5f00\u59cb\u8bad\u7ec3\uff0c\u518d\u5b8c\u6210\u81f3\u5c11\u4e00\u6b21\u52a8\u4f5c\u3002",
+            nextStep: "\u4e0b\u4e00\u6b65",
+            triedOnly: "\u672c\u8f6e\u5df2\u5c1d\u8bd5 ",
+            triedOnlySuffix: " \u6b21",
+            triedOnlySub: "\u8fd8\u6ca1\u6709\u5b8c\u6210\u6709\u6548\u52a8\u4f5c\uff0c\u8bf7\u5148\u628a\u52a8\u4f5c\u5b8c\u6574\u505a\u51fa\u6765\u3002",
+            mainIssue: "\u4e3b\u8981\u95ee\u9898",
+            continueImprove: "\u7ee7\u7eed\u4f18\u5316",
+            roundResult: "\u672c\u8f6e\u7ed3\u679c",
+            noClearFailure: "\u672c\u8f6e\u6ca1\u6709\u660e\u663e\u5931\u8d25\u95ee\u9898\u3002",
+            keepRhythm: "\u52a8\u4f5c\u6574\u4f53\u8f83\u5b8c\u6574\uff0c\u7ee7\u7eed\u4fdd\u6301\u5f53\u524d\u8282\u594f\u3002",
+            tryToComplete: "\u5148\u4fdd\u8bc1\u52a8\u4f5c\u8fde\u8d2f\u5b8c\u6210\u4e00\u6b21\u3002",
+            clickStart: "\u70b9\u51fb\u53f3\u4e0a\u5f00\u59cb",
+            roundEnded: "\u672c\u8f6e\u5df2\u7ed3\u675f",
+            roundEndedSub: "\u53ef\u67e5\u770b\u603b\u7ed3\uff0c\u4e5f\u53ef\u4ee5\u518d\u6b21\u70b9\u51fb\u5f00\u59cb\u8fdb\u5165\u4e0b\u4e00\u8f6e\u3002",
+            roundEndedSpeech: "\u672c\u8f6e\u5df2\u7ed3\u675f\uff0c\u53ef\u4ee5\u67e5\u770b\u603b\u7ed3\u3002",
+            actionComplete: "\u8fd9\u6b21\u52a8\u4f5c\u66f4\u5b8c\u6574",
+            actionCompleteSub: "\u7ee7\u7eed\u4fdd\u6301\u9884\u6446\u3001\u8d77\u8df3\u548c\u843d\u5730\u7f13\u51b2\u7684\u8fde\u8d2f\u8282\u594f\u3002",
+            actionCompleteSpeech: "\u8fd9\u6b21\u52a8\u4f5c\u66f4\u5b8c\u6574\uff0c\u7ee7\u7eed\u4fdd\u6301\u3002",
+            notDoneFallback: "\u8fd9\u6b21\u8fd8\u6ca1\u5b8c\u6210",
+            notDoneSub: "\u6839\u636e\u63d0\u793a\u518d\u8bd5\u4e00\u6b21\u3002",
+            armGood: "\u6446\u81c2\u5b8c\u6210\u5f97\u4e0d\u9519",
+            armGoodSub: "\u7ee7\u7eed\u4fdd\u6301\u540e\u6446\u5230\u524d\u4e0a\u6446\u7684\u8282\u594f\u3002",
+            preloadGood: "\u8fd9\u6b21\u8e6c\u4f38\u66f4\u8fde\u8d2f",
+            preloadGoodSub: "\u7ee7\u7eed\u4fdd\u6301\u5c48\u819d\u4e0b\u6c89\u540e\u5feb\u901f\u8e6c\u5730\u3002",
+            landingGood: "\u843d\u5730\u7f13\u51b2\u4e0d\u9519",
+            landingGoodSub: "\u7ee7\u7eed\u4fdd\u6301\u811a\u8ddf\u5148\u7740\u5730\uff0c\u518d\u4e3b\u52a8\u5c48\u819d\u3002",
+            readyToMove: "\u53ef\u4ee5\u5f00\u59cb\u52a8\u4f5c\u4e86",
+            readyToMoveSub: "\u5148\u5c48\u819d\u9884\u6446\uff0c\u518d\u5feb\u901f\u8e6c\u5730\u8d77\u8df3\u3002",
+            standFirst: "\u5148\u7ad9\u7a33\u518d\u5f00\u59cb",
+            standFirstSub: "\u4fdd\u6301\u4fa7\u8eab\uff0c\u5168\u8eab\u5165\u955c\uff0c\u7a33\u5b9a 1 \u79d2\u540e\u518d\u505a\u52a8\u4f5c\u3002",
+            preloadCue: "\u9884\u6446\u518d\u5b8c\u6574\u4e00\u70b9",
+            preloadCueSub: "\u819d\u548c\u9acb\u4e00\u8d77\u4e0b\u6c89\uff0c\u518d\u8fde\u4e0a\u4e0b\u4e00\u6b65\u8d77\u8df3\u3002",
+            takeoffCue: "\u8d77\u8df3\u66f4\u5feb\u4e00\u4e9b",
+            takeoffCueSub: "\u8e6c\u5730\u548c\u6446\u81c2\u540c\u65f6\u66f4\u4e3b\u52a8\uff0c\u52a8\u4f5c\u4e00\u6c14\u5475\u6210\u3002",
+            flightCue: "\u8eab\u4f53\u7ee7\u7eed\u524d\u9001",
+            flightCueSub: "\u817e\u7a7a\u65f6\u4fdd\u6301\u5411\u524d\uff0c\u51c6\u5907\u811a\u8ddf\u5148\u7740\u5730\u3002",
+            landingCue: "\u811a\u8ddf\u5148\u7740\u5730",
+            landingCueSub: "\u968f\u540e\u4e3b\u52a8\u5c48\u819d\u7f13\u51b2\uff0c\u843d\u5730\u540e\u7ad9\u7a33\u3002",
+            armMode: "\u5148\u505a\u6446\u81c2\u4e13\u9879",
+            armModeSub: "\u8fd9\u8f6e\u53ea\u5173\u6ce8\u624b\u81c2\u540e\u6446\u5230\u524d\u4e0a\u6446\u7684\u53d1\u529b\u8282\u594f\u3002",
+            preloadMode: "\u5148\u505a\u9884\u6446\u8e6c\u4f38\u4e13\u9879",
+            preloadModeSub: "\u8fd9\u8f6e\u91cd\u70b9\u662f\u5c48\u819d\u4e0b\u6c89\u540e\uff0c\u518d\u5feb\u901f\u8e6c\u5730\u4f38\u5c55\u3002",
+            landingMode: "\u5148\u505a\u843d\u5730\u7f13\u51b2\u4e13\u9879",
+            landingModeSub: "\u8fd9\u8f6e\u53ea\u5173\u6ce8\u811a\u8ddf\u5148\u7740\u5730\u548c\u5c48\u819d\u7f13\u51b2\u3002"
+        };
+
+        const frame = document.getElementById("student-app-frame");
+        const loadingShell = document.getElementById("loading-shell");
+        loadingShell.textContent = TEXT.loading;
+
+        function waitForApp(win) {
+            return new Promise(resolve => {
+                const check = () => {
+                    if (
+                        win &&
+                        typeof win.toggleTraining === "function" &&
+                        typeof win.renderRoundSummary === "function" &&
+                        typeof win.changeMode === "function" &&
+                        win.document &&
+                        win.document.querySelector(".stage")
+                    ) {
+                        resolve();
+                        return;
+                    }
+                    setTimeout(check, 120);
+                };
+                check();
+            });
+        }
+
+        function injectStudentStyles(doc) {
+            if (doc.getElementById("student-mode-style")) return;
+            const style = doc.createElement("style");
+            style.id = "student-mode-style";
+            style.textContent = `
+                .counter-dock {
+                    width: 126px !important;
+                    padding-bottom: 16px !important;
+                }
+
+                .student-mode-toggle {
+                    margin-top: 10px;
+                    width: 100%;
+                    min-height: 38px;
+                    border-radius: 14px;
+                    border: 1px solid rgba(255, 255, 255, 0.14);
+                    background: rgba(255, 255, 255, 0.08);
+                    color: #f6f9ff;
+                    font-size: 13px;
+                    font-weight: 700;
+                    cursor: pointer;
+                    transition: background 0.18s ease, transform 0.18s ease, color 0.18s ease;
+                }
+
+                .student-mode-toggle.is-active {
+                    background: linear-gradient(180deg, rgba(244, 99, 99, 0.96), rgba(217, 64, 64, 0.94));
+                    color: #fff;
+                }
+
+                .stage-side-right,
+                .phase-badge {
+                    display: none !important;
+                }
+
+                .stage-side-left {
+                    width: 220px !important;
+                    padding: 18px !important;
+                }
+
+                .stage-mode-name {
+                    font-size: 24px !important;
+                }
+
+                .stage-drill-item {
+                    padding: 10px 12px !important;
+                    border-radius: 16px !important;
+                    background: rgba(255, 255, 255, 0.08) !important;
+                    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+                }
+
+                .stage-drill-item strong {
+                    margin-bottom: 6px !important;
+                    font-size: 12px !important;
+                    color: rgba(228, 236, 248, 0.74) !important;
+                    letter-spacing: 0.8px !important;
+                }
+
+                .stage-drill-item span {
+                    font-size: 14px !important;
+                    line-height: 1.75 !important;
+                    color: rgba(244, 248, 255, 0.88) !important;
+                }
+
+                .student-mode-coach {
+                    position: absolute;
+                    left: 50%;
+                    bottom: 34px;
+                    width: min(720px, calc(100vw - 140px));
+                    padding: 18px 22px 20px;
+                    border-radius: 28px;
+                    transform: translateX(-50%);
+                    text-align: center;
+                    z-index: 18;
+                    background: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.08));
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    box-shadow: 0 28px 60px rgba(0, 0, 0, 0.28);
+                    backdrop-filter: blur(20px);
+                }
+
+                .student-mode-coach-kicker {
+                    margin-bottom: 10px;
+                    font-size: 12px;
+                    font-weight: 700;
+                    letter-spacing: 1px;
+                    color: rgba(223, 231, 245, 0.68);
+                }
+
+                .student-mode-coach-title {
+                    margin-bottom: 10px;
+                    font-size: clamp(26px, 3vw, 44px);
+                    line-height: 1.08;
+                    font-weight: 900;
+                    color: #f8fbff;
+                    text-shadow: 0 14px 30px rgba(0, 0, 0, 0.22);
+                }
+
+                .student-mode-coach-sub {
+                    max-width: 560px;
+                    margin: 0 auto;
+                    font-size: 16px;
+                    line-height: 1.7;
+                    color: rgba(219, 229, 245, 0.82);
+                }
+
+                details.student-mode-details {
+                    padding: 0 !important;
+                    overflow: hidden;
+                }
+
+                details.student-mode-details > summary {
+                    list-style: none;
+                    cursor: pointer;
+                    padding: 16px;
+                    color: #f8fbff;
+                    font-weight: 700;
+                }
+
+                details.student-mode-details > summary::-webkit-details-marker {
+                    display: none;
+                }
+
+                .student-mode-details-body {
+                    padding: 0 16px 16px;
+                }
+
+                details.student-mode-details.history-panel .student-mode-details-body {
+                    display: flex;
+                    flex-direction: column;
+                    min-height: 220px;
+                }
+
+                .drawer-action-grid {
+                    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+                }
+
+                @media (max-width: 900px) {
+                    .stage-side-left {
+                        width: calc(100vw - 150px) !important;
+                        bottom: 144px !important;
+                        top: auto !important;
+                        left: 14px !important;
+                        padding: 14px !important;
+                    }
+
+                    .student-mode-coach {
+                        width: calc(100vw - 28px);
+                        left: 14px;
+                        bottom: 14px;
+                        transform: none;
+                        padding: 16px 18px 18px;
+                    }
+
+                    .student-mode-coach-title {
+                        font-size: 24px;
+                    }
+
+                    .student-mode-coach-sub {
+                        font-size: 14px;
+                    }
+                }
+            `;
+            doc.head.appendChild(style);
+        }
+
+        function collapsePanel(doc, panel, titleText, extraClass) {
+            if (!panel || panel.tagName === "DETAILS") return panel;
+            const details = doc.createElement("details");
+            details.className = `${panel.className} student-mode-details ${extraClass || ""}`.trim();
+            const summary = doc.createElement("summary");
+            const strong = doc.createElement("strong");
+            strong.textContent = titleText;
+            summary.appendChild(strong);
+            details.appendChild(summary);
+            const body = doc.createElement("div");
+            body.className = "student-mode-details-body";
+            while (panel.firstChild) body.appendChild(panel.firstChild);
+            details.appendChild(body);
+            panel.replaceWith(details);
+            return details;
+        }
+
+        function createCoachCard(doc) {
+            let coach = doc.getElementById("student-mode-coach");
+            if (coach) return coach;
+            coach = doc.createElement("section");
+            coach.id = "student-mode-coach";
+            coach.className = "student-mode-coach";
+            coach.innerHTML = `
+                <div class="student-mode-coach-kicker">${TEXT.coachKicker}</div>
+                <div class="student-mode-coach-title" id="student-mode-coach-main">${TEXT.startHintTitle}</div>
+                <div class="student-mode-coach-sub" id="student-mode-coach-sub">${TEXT.startHintSub}</div>
+            `;
+            doc.querySelector(".stage").appendChild(coach);
+            return coach;
+        }
+
+        function createToggleButton(doc, win) {
+            let button = doc.getElementById("student-mode-toggle");
+            if (button) return button;
+            button = doc.createElement("button");
+            button.id = "student-mode-toggle";
+            button.className = "student-mode-toggle";
+            button.type = "button";
+            button.textContent = TEXT.start;
+            button.addEventListener("click", () => win.toggleTraining());
+            doc.querySelector(".counter-dock").appendChild(button);
+            return button;
+        }
+
+        function applyStudentMode(win) {
+            const doc = win.document;
+            injectStudentStyles(doc);
+            win.eval(`
+                window.__studentBridge = {
+                    get app() { return app; },
+                    get issueMeta() { return ISSUE_META; },
+                    get drillContent() { return DRILL_CONTENT; },
+                    currentMode,
+                    currentModeLabel,
+                    topReasonEntries,
+                    buildTopReasonText,
+                    setPhase,
+                    maybeSpeakFeedback
+                };
+            `);
+            const bridge = win.__studentBridge;
+
+            const coach = createCoachCard(doc);
+            const coachMain = coach.querySelector("#student-mode-coach-main");
+            const coachSub = coach.querySelector("#student-mode-coach-sub");
+            const toggleButton = createToggleButton(doc, win);
+            const feedbackStage = doc.getElementById("feedback-stage");
+            const framingMain = doc.getElementById("feedback-main");
+            const framingSub = doc.getElementById("feedback-sub");
+            const leftPanel = doc.querySelector(".stage-side-left");
+            const rightPanel = doc.querySelector(".stage-side-right");
+            const startBtn = doc.getElementById("start-btn");
+            const drawerTitle = doc.querySelector(".drawer-title");
+            const drawerSubtitle = doc.querySelector(".drawer-subtitle");
+            const classPanel = doc.getElementById("class-name-input")?.closest(".panel");
+            const historyPanel = doc.getElementById("history-list")?.closest(".panel");
+            const finishBtn = [...doc.querySelectorAll(".drawer-action-grid button")].find(btn => /\u7ed3\u675f\u672c\u8f6e/.test(btn.textContent));
+            const stageModeName = doc.getElementById("stage-mode-name");
+            const stageDrillList = doc.getElementById("stage-drill-list");
+            const drillList = doc.getElementById("drill-list");
+            const roundSummary = doc.getElementById("round-summary");
+
+            if (leftPanel) {
+                const kicker = leftPanel.querySelector(".stage-side-kicker");
+                if (kicker) kicker.textContent = TEXT.taskKicker;
+            }
+            if (rightPanel) rightPanel.remove();
+            if (finishBtn) finishBtn.style.display = "none";
+            if (startBtn) startBtn.textContent = TEXT.startTraining;
+            if (drawerTitle) drawerTitle.textContent = TEXT.controlTitle;
+            if (drawerSubtitle) drawerSubtitle.textContent = TEXT.controlSubtitle;
+
+            collapsePanel(doc, classPanel, TEXT.classInfo, "");
+            collapsePanel(doc, historyPanel, TEXT.history, "history-panel");
+
+            const stageChains = {
+                full: "\u9884\u6446 \u2192 \u8e6c\u4f38\u8d77\u8df3 \u2192 \u817e\u7a7a \u2192 \u843d\u5730\u7f13\u51b2",
+                arms: "\u540e\u6446 \u2192 \u524d\u4e0a\u6446 \u2192 \u5e26\u52a8\u8d77\u8df3",
+                preload: "\u5c48\u819d\u9884\u6446 \u2192 \u5feb\u901f\u8e6c\u4f38 \u2192 \u79bb\u5730",
+                landing: "\u811a\u8ddf\u5148\u7740\u5730 \u2192 \u5c48\u819d\u7f13\u51b2 \u2192 \u7a33\u5b9a\u7ad9\u4f4f"
+            };
+
+            function getMode() {
+                return typeof bridge.currentMode === "function" ? bridge.currentMode() : "full";
+            }
+
+            function getModeLabel() {
+                return typeof bridge.currentModeLabel === "function" ? bridge.currentModeLabel() : "\u5b8c\u6574\u7acb\u5b9a\u8df3\u8fdc";
+            }
+
+            function buildSuggestion(round) {
+                const mode = getMode();
+                const practiceCount = Number(round.practiceCount || 0);
+                const successCount = Number(round.successCount || 0);
+                if (practiceCount === 0) return "\u5148\u70b9\u51fb\u5f00\u59cb\u8bad\u7ec3\uff0c\u518d\u5b8c\u6210\u81f3\u5c11\u4e00\u6b21\u6709\u6548\u52a8\u4f5c\u3002";
+                const failTop = bridge.topReasonEntries(round.failReasons || {});
+                if (failTop.length > 0) return bridge.issueMeta[failTop[0][0]].advice;
+                if (practiceCount > 0 && successCount === 0) return "\u5148\u5b8c\u6210\u4e00\u6b21\u5b8c\u6574\u52a8\u4f5c\uff0c\u518d\u6839\u636e\u7ed3\u679c\u7ee7\u7eed\u8c03\u6574\u3002";
+                const improveTop = bridge.topReasonEntries(round.improvementReasons || {});
+                if (improveTop.length > 0) return `\u5df2\u7ecf\u5b8c\u6210\u52a8\u4f5c\uff0c\u4e0b\u4e00\u8f6e\u91cd\u70b9\u4f18\u5316\uff1a${bridge.issueMeta[improveTop[0][0]].label}\u3002`;
+                if (mode === "arms") return "\u7ee7\u7eed\u7ec3\u5927\u81c2\u540e\u6446\u5230\u524d\u4e0a\u6446\u7684\u5b8c\u6574\u8282\u594f\u3002";
+                if (mode === "preload") return "\u4e0b\u4e00\u8f6e\u7ee7\u7eed\u5148\u5c48\u819d\u9884\u6446\uff0c\u518d\u5feb\u901f\u8e6c\u4f38\u3002";
+                if (mode === "landing") return "\u4e0b\u4e00\u8f6e\u7ee7\u7eed\u4fdd\u6301\u811a\u8ddf\u7740\u5730\u548c\u5c48\u819d\u7f13\u51b2\u3002";
+                return "\u52a8\u4f5c\u6574\u4f53\u8f83\u5b8c\u6574\uff0c\u4e0b\u4e00\u8f6e\u7ee7\u7eed\u4fdd\u6301\u9884\u6446\u3001\u8e6c\u4f38\u548c\u843d\u5730\u7f13\u51b2\u8282\u594f\u3002";
+            }
+
+            function buildAnalysis() {
+                const round = bridge.app.round || { practiceCount: 0, successCount: 0, failedCount: 0, failReasons: {}, improvementReasons: {} };
+                const practiceCount = Number(round.practiceCount || 0);
+                const successCount = Number(round.successCount || 0);
+                const failedCount = Number(round.failedCount || 0);
+                const topReasonsText = bridge.buildTopReasonText(round.failReasons || {});
+                const improvementText = bridge.buildTopReasonText(round.improvementReasons || {});
+                const suggestion = buildSuggestion(round);
+                let summaryText = "";
+                if (practiceCount === 0) summaryText = TEXT.noRoundYetSub;
+                else if (successCount === 0) summaryText = `\u672c\u8f6e\u5df2\u7ec3\u4e60 ${practiceCount} \u6b21\uff0c\u4f46\u8fd8\u6ca1\u6709\u5b8c\u6210\u6709\u6548\u52a8\u4f5c\u3002\u4e3b\u8981\u95ee\u9898\uff1a${topReasonsText || "\u5148\u4fdd\u8bc1\u52a8\u4f5c\u5b8c\u6574\u505a\u51fa\u6765"}\u3002\u4e0b\u4e00\u8f6e\u5efa\u8bae\uff1a${suggestion}`;
+                else summaryText = `\u672c\u8f6e\u7ec3\u4e60 ${practiceCount} \u6b21\uff0c\u6210\u529f ${successCount} \u6b21\uff0c\u672a\u6210\u529f ${failedCount} \u6b21\u3002\u4e3b\u8981\u95ee\u9898\uff1a${topReasonsText || "\u672a\u53d1\u73b0\u660e\u663e\u5931\u8d25\u539f\u56e0"}\u3002\u7ee7\u7eed\u4f18\u5316\uff1a${improvementText || "\u6574\u4f53\u52a8\u4f5c\u8f83\u5b8c\u6574"}\u3002\u4e0b\u4e00\u8f6e\u5efa\u8bae\uff1a${suggestion}`;
+                return { practiceCount, successCount, failedCount, topReasonsText, improvementText, suggestion, summaryText };
+            }
+
+            function normalizeFeedback(main, sub, phase) {
+                if (!bridge.app.training && phase === "IDLE") {
+                    return { title: TEXT.startHintTitle, detail: TEXT.startHintSub, speech: "" };
+                }
+                if (main.includes("\u672c\u8f6e\u5df2\u7ed3\u675f")) {
+                    return { title: TEXT.roundEnded, detail: TEXT.roundEndedSub, speech: TEXT.roundEndedSpeech };
+                }
+                if (main.includes("\u672c\u6b21\u7ec3\u4e60\u5b8c\u6210")) {
+                    return { title: TEXT.actionComplete, detail: TEXT.actionCompleteSub, speech: TEXT.actionCompleteSpeech };
+                }
+                if (main.includes("\u672c\u6b21\u672a\u5b8c\u6210") || main.includes("\u672c\u6b21\u672a\u6210\u529f")) {
+                    return {
+                        title: main.replace(/^\u672c\u6b21(?:\u672a\u5b8c\u6210|\u672a\u6210\u529f)\uff1a?/, "").trim() || TEXT.notDoneFallback,
+                        detail: sub || TEXT.notDoneSub,
+                        speech: sub || main
+                    };
+                }
+                if (main.includes("\u6446\u81c2\u4e13\u9879\u6210\u529f")) return { title: TEXT.armGood, detail: TEXT.armGoodSub, speech: TEXT.armGood };
+                if (main.includes("\u9884\u6446\u8e6c\u4f38\u5b8c\u6210")) return { title: TEXT.preloadGood, detail: TEXT.preloadGoodSub, speech: TEXT.preloadGood };
+                if (main.includes("\u843d\u5730\u7f13\u51b2\u5b8c\u6210")) return { title: TEXT.landingGood, detail: TEXT.landingGoodSub, speech: TEXT.landingGood };
+                if (phase === "READY") {
+                    if (/\u5df2\u51c6\u5907\u597d/.test(main)) return { title: TEXT.readyToMove, detail: TEXT.readyToMoveSub, speech: TEXT.readyToMove };
+                    if (/\u5148\u7ad9\u7a33\u51c6\u5907|\u8bf7\u5148\u7ad9\u7a33\u51c6\u5907/.test(main)) return { title: TEXT.standFirst, detail: TEXT.standFirstSub, speech: TEXT.standFirst };
+                    if (/\u4e13\u9879/.test(main)) {
+                        if (main.includes("\u6446\u81c2")) return { title: TEXT.armMode, detail: TEXT.armModeSub, speech: TEXT.armMode };
+                        if (main.includes("\u9884\u6446")) return { title: TEXT.preloadMode, detail: TEXT.preloadModeSub, speech: TEXT.preloadMode };
+                        if (main.includes("\u843d\u5730")) return { title: TEXT.landingMode, detail: TEXT.landingModeSub, speech: TEXT.landingMode };
+                    }
+                }
+                if (phase === "PRELOAD" || /\u9884\u6446/.test(main)) return { title: TEXT.preloadCue, detail: TEXT.preloadCueSub, speech: TEXT.preloadCue };
+                if (phase === "TAKEOFF" || /\u8e6c\u4f38\u8d77\u8df3/.test(main)) return { title: TEXT.takeoffCue, detail: TEXT.takeoffCueSub, speech: TEXT.takeoffCue };
+                if (phase === "FLIGHT" || /\u817e\u7a7a/.test(main)) return { title: TEXT.flightCue, detail: TEXT.flightCueSub, speech: TEXT.flightCue };
+                if (phase === "LANDING" || /\u843d\u5730\u7f13\u51b2/.test(main)) return { title: TEXT.landingCue, detail: TEXT.landingCueSub, speech: TEXT.landingCue };
+                return { title: main, detail: sub, speech: sub || main };
+            }
+
+            win.showFramingPrompt = function(main, sub) {
+                framingMain.textContent = main;
+                framingSub.textContent = sub;
+                feedbackStage.classList.add("is-visible");
+            };
+
+            win.hideFramingPrompt = function() {
+                feedbackStage.classList.remove("is-visible");
+            };
+
+            win.syncTrainingButtons = function() {
+                const training = !!bridge.app.training;
+                if (startBtn) {
+                    startBtn.textContent = training ? TEXT.finishTraining : TEXT.startTraining;
+                    startBtn.className = training ? "danger" : "primary";
+                }
+                toggleButton.textContent = training ? TEXT.finish : TEXT.start;
+                toggleButton.classList.toggle("is-active", training);
+            };
+
+            win.renderDrills = function() {
+                const drills = bridge.drillContent[getMode()] || [];
+                drillList.innerHTML = drills.map(item => `
+                    <div class="drill-item">
+                        <strong>${item.title}</strong>
+                        <span>${item.text}</span>
+                    </div>
+                `).join("");
+                stageModeName.textContent = getModeLabel();
+                stageDrillList.innerHTML = `
+                    <div class="stage-drill-item">
+                        <strong>${TEXT.taskChain}</strong>
+                        <span>${stageChains[getMode()] || stageChains.full}</span>
+                    </div>
+                `;
+            };
+
+            win.pickSuggestion = function() {
+                return buildSuggestion(bridge.app.round || {});
+            };
+
+            win.buildRoundAnalysis = function() {
+                return buildAnalysis();
+            };
+
+            win.updateFeedback = function(main, sub, phase) {
+                const message = normalizeFeedback(main, sub, phase);
+                coachMain.textContent = message.title;
+                coachSub.textContent = message.detail;
+                if (phase) bridge.setPhase(phase);
+                if (typeof bridge.maybeSpeakFeedback === "function") bridge.maybeSpeakFeedback(message.speech || message.title, phase);
+            };
+
+            win.renderRoundSummary = function() {
+                const analysis = buildAnalysis();
+                if (analysis.practiceCount === 0) {
+                    roundSummary.innerHTML = `
+                        <div class="summary-card"><strong>${TEXT.noRoundYet}</strong><p>${TEXT.noRoundYetSub}</p></div>
+                        <div class="summary-card"><strong>${TEXT.nextStep}</strong><p>${analysis.suggestion}</p></div>
+                    `;
+                    return;
+                }
+                if (analysis.successCount === 0) {
+                    roundSummary.innerHTML = `
+                        <div class="summary-card"><strong>${TEXT.triedOnly}${analysis.practiceCount}${TEXT.triedOnlySuffix}</strong><p>${TEXT.triedOnlySub}</p></div>
+                        <div class="summary-card"><strong>${TEXT.mainIssue}</strong><p>${analysis.topReasonsText || TEXT.tryToComplete}</p></div>
+                        <div class="summary-card"><strong>${TEXT.nextStep}</strong><p>${analysis.suggestion}</p></div>
+                    `;
+                    return;
+                }
+                roundSummary.innerHTML = `
+                    <div class="summary-card"><strong>${TEXT.roundResult}</strong><p>\u7ec3\u4e60 ${analysis.practiceCount} \u6b21\uff0c\u6210\u529f ${analysis.successCount} \u6b21\uff0c\u672a\u6210\u529f ${analysis.failedCount} \u6b21\u3002</p></div>
+                    <div class="summary-card"><strong>${TEXT.mainIssue}</strong><p>${analysis.topReasonsText || TEXT.noClearFailure}</p></div>
+                    <div class="summary-card"><strong>${TEXT.continueImprove}</strong><p>${analysis.improvementText || TEXT.keepRhythm}</p></div>
+                    <div class="summary-card"><strong>${TEXT.nextStep}</strong><p>${analysis.suggestion}</p></div>
+                `;
+            };
+
+            win.changeMode();
+            win.syncTrainingButtons();
+            if (!bridge.app.training) win.updateFeedback(TEXT.clickStart, TEXT.startHintSub, "IDLE");
+            win.renderRoundSummary();
+        }
+
+        frame.addEventListener("load", async () => {
+            try {
+                const win = frame.contentWindow;
+                await waitForApp(win);
+                applyStudentMode(win);
+                loadingShell.style.display = "none";
+            } catch (error) {
+                loadingShell.textContent = TEXT.loadingFailed + error.message;
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>
