@@ -20,10 +20,6 @@ const SESSION_META_KEY = 'jump-gemini-session-meta-v1';
 const SUPABASE_URL = 'https://dmssegbmfnngigjiaqgv.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_n-sRBVrmElw3Lv0HU5e6uQ_rSfgklXe';
 const SUPABASE_TABLE = 'jump_round_records';
-const SIDE_REQUIRED_POINTS = {
-    left: [11, 15, 23, 25, 27, 29, 31],
-    right: [12, 16, 24, 26, 28, 30, 32]
-};
 const CONNECTORS = [
     [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
     [11, 23], [12, 24], [23, 24], [23, 25], [24, 26],
@@ -679,124 +675,8 @@ const app = {
             return corePointVisible(point, JUMP_CONFIG.minVisibility);
         }
 
-        function pointTracked(point) {
-            return point && typeof point.x === 'number' && typeof point.y === 'number';
-        }
-
-        function sideRequiredVisible(landmarks, side) {
-            return SIDE_REQUIRED_POINTS[side].every(index => pointVisible(landmarks[index]));
-        }
-
-        function coreTracked(landmarks) {
-            return [11, 12, 23, 24].every(index => pointTracked(landmarks[index]));
-        }
-
-        function resolveTrackedSide(landmarks) {
-            const preferredSide = getVisibleSide(landmarks);
-            if (coreTracked(landmarks) && sideRequiredVisible(landmarks, preferredSide)) return preferredSide;
-            const fallbackSide = preferredSide === 'left' ? 'right' : 'left';
-            if (coreTracked(landmarks) && sideRequiredVisible(landmarks, fallbackSide)) return fallbackSide;
-            return null;
-        }
-
-        function allRequiredVisible(landmarks) {
-            return !!resolveTrackedSide(landmarks);
-        }
-
-        function midpoint(a, b) {
-            return {
-                x: (a.x + b.x) / 2,
-                y: (a.y + b.y) / 2,
-                z: (((typeof a.z === 'number' ? a.z : 0) + (typeof b.z === 'number' ? b.z : 0)) / 2)
-            };
-        }
-
-        function distance(a, b) {
-            return Math.hypot(a.x - b.x, a.y - b.y);
-        }
-
-        function getAngle2D(a, b, c) {
-            if (!a || !b || !c) return 180;
-            const abx = a.x - b.x;
-            const aby = a.y - b.y;
-            const cbx = c.x - b.x;
-            const cby = c.y - b.y;
-            const ab = Math.hypot(abx, aby);
-            const cb = Math.hypot(cbx, cby);
-            if (!ab || !cb) return 180;
-            const cosine = Math.min(1, Math.max(-1, (abx * cbx + aby * cby) / (ab * cb)));
-            return Math.acos(cosine) * 180 / Math.PI;
-        }
-
-        function getAngle3D(a, b, c) {
-            if (!a || !b || !c) return 180;
-            const ab = {
-                x: (a.x - b.x),
-                y: (a.y - b.y),
-                z: ((typeof a.z === 'number' ? a.z : 0) - (typeof b.z === 'number' ? b.z : 0))
-            };
-            const cb = {
-                x: (c.x - b.x),
-                y: (c.y - b.y),
-                z: ((typeof c.z === 'number' ? c.z : 0) - (typeof b.z === 'number' ? b.z : 0))
-            };
-            const dot = ab.x * cb.x + ab.y * cb.y + ab.z * cb.z;
-            const magAB = Math.hypot(ab.x, ab.y, ab.z);
-            const magCB = Math.hypot(cb.x, cb.y, cb.z);
-            if (!magAB || !magCB) return 180;
-            const cosine = Math.min(1, Math.max(-1, dot / (magAB * magCB)));
-            return Math.acos(cosine) * 180 / Math.PI;
-        }
-
-        function getAngle(a, b, c) {
-            const angle2D = getAngle2D(a, b, c);
-            const angle3D = getAngle3D(a, b, c);
-            const diff = Math.abs(angle3D - angle2D);
-            if (diff <= 18) return angle3D;
-            if (diff >= 45) return angle2D;
-            const weight3D = (45 - diff) / (45 - 18);
-            return angle2D * (1 - weight3D) + angle3D * weight3D;
-        }
-
-        function getVisibleSide(landmarks) {
-            const weights = {
-                11: 0.6, 12: 0.6,
-                15: 0.35, 16: 0.35,
-                23: 1.5, 24: 1.5,
-                25: 1.3, 26: 1.3,
-                27: 1.2, 28: 1.2,
-                29: 1.0, 30: 1.0,
-                31: 1.0, 32: 1.0
-            };
-            const leftIndexes = [11, 15, 23, 25, 27, 29, 31];
-            const rightIndexes = [12, 16, 24, 26, 28, 30, 32];
-            const score = (indexes) => indexes.reduce((sum, index) => {
-                const p = landmarks[index];
-                return sum + (((p && p.visibility) || 0) * (weights[index] || 1));
-            }, 0);
-            const leftScore = score(leftIndexes);
-            const rightScore = score(rightIndexes);
-            return leftScore >= rightScore ? 'left' : 'right';
-        }
-
         function extractFeatures(landmarks) {
             return coreExtractFeatures(landmarks, JUMP_CONFIG);
-        }
-
-        function blendNumber(prev, curr, alpha) {
-            if (!Number.isFinite(prev)) return curr;
-            if (!Number.isFinite(curr)) return prev;
-            return prev * (1 - alpha) + curr * alpha;
-        }
-
-        function blendPoint(prev, curr, alpha) {
-            if (!prev) return curr;
-            if (!curr) return prev;
-            return {
-                x: blendNumber(prev.x, curr.x, alpha),
-                y: blendNumber(prev.y, curr.y, alpha),
-                z: blendNumber(prev.z, curr.z, alpha)
-            };
         }
 
         function smoothFeatures(features) {
@@ -877,10 +757,6 @@ const app = {
 
         function incrementReason(bucket, code) {
             coreIncrementReason(bucket, code);
-        }
-
-        function topReasonEntries(bucket) {
-            return Object.entries(bucket).sort((a, b) => b[1] - a[1]).slice(0, 2);
         }
 
         function buildTopReasonText(bucket) {
@@ -1430,11 +1306,25 @@ const app = {
             if (showIdleMessage) updateFeedback('本轮已结束', '可切换学生或点击开始分析，进入下一轮。', 'IDLE');
         }
 
+        async function registerServiceWorker() {
+            if (!('serviceWorker' in navigator)) return;
+            const isSecureContextHost = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            if (!isSecureContextHost) return;
+            try {
+                const swUrl = new URL('../service-worker.js', import.meta.url);
+                const scope = new URL('../', import.meta.url).pathname;
+                await navigator.serviceWorker.register(swUrl, { scope });
+            } catch (error) {
+                console.warn('Failed to register service worker', error);
+            }
+        }
+
         async function initCamera() {
             overlay.style.display = 'flex';
             overlayText.textContent = '正在打开摄像头并加载姿态识别，请允许摄像头权限。';
             try {
-                const pose = new Pose({ locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+                const poseAssetBase = new URL('../mediapipe/pose/', import.meta.url);
+                const pose = new Pose({ locateFile: file => new URL(file, poseAssetBase).href });
                 pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
                 pose.onResults(onResults);
                 const camera = new Camera(video, {
@@ -1455,6 +1345,7 @@ const app = {
         }
 
         async function initApp() {
+            await registerServiceWorker();
             const snapshot = await storageApi.init();
             app.students = normalizeStudents(snapshot[STORAGE_KEY]);
             audioState.prefs = normalizeAudioPrefs(snapshot[AUDIO_PREFS_KEY]);
