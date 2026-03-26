@@ -726,6 +726,10 @@
         const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_n-sRBVrmElw3Lv0HU5e6uQ_rSfgklXe';
         const SUPABASE_TABLE = 'jump_round_records';
         const REQUIRED_POINTS = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+        const SIDE_REQUIRED_POINTS = {
+            left: [11, 15, 23, 25, 27, 29, 31],
+            right: [12, 16, 24, 26, 28, 30, 32]
+        };
         const CONNECTORS = [
             [11, 12], [11, 13], [13, 15], [12, 14], [14, 16],
             [11, 23], [12, 24], [23, 24], [23, 25], [24, 26],
@@ -1450,8 +1454,28 @@
             return point && typeof point.x === 'number' && typeof point.y === 'number' && (point.visibility == null || point.visibility >= JUMP_CONFIG.minVisibility);
         }
 
+        function pointTracked(point) {
+            return point && typeof point.x === 'number' && typeof point.y === 'number';
+        }
+
+        function sideRequiredVisible(landmarks, side) {
+            return SIDE_REQUIRED_POINTS[side].every(index => pointVisible(landmarks[index]));
+        }
+
+        function coreTracked(landmarks) {
+            return [11, 12, 23, 24].every(index => pointTracked(landmarks[index]));
+        }
+
+        function resolveTrackedSide(landmarks) {
+            const preferredSide = getVisibleSide(landmarks);
+            if (coreTracked(landmarks) && sideRequiredVisible(landmarks, preferredSide)) return preferredSide;
+            const fallbackSide = preferredSide === 'left' ? 'right' : 'left';
+            if (coreTracked(landmarks) && sideRequiredVisible(landmarks, fallbackSide)) return fallbackSide;
+            return null;
+        }
+
         function allRequiredVisible(landmarks) {
-            return REQUIRED_POINTS.every(index => pointVisible(landmarks[index]));
+            return !!resolveTrackedSide(landmarks);
         }
 
         function midpoint(a, b) {
@@ -1531,10 +1555,10 @@
         }
 
         function extractFeatures(landmarks) {
-            if (!allRequiredVisible(landmarks)) return null;
+            const side = resolveTrackedSide(landmarks);
+            if (!side) return null;
             const hipMid = midpoint(landmarks[23], landmarks[24]);
             const shoulderMid = midpoint(landmarks[11], landmarks[12]);
-            const side = getVisibleSide(landmarks);
             const useLeft = side === 'left';
             const hip = landmarks[useLeft ? 23 : 24];
             const knee = landmarks[useLeft ? 25 : 26];
@@ -1545,14 +1569,20 @@
             const wrist = landmarks[useLeft ? 15 : 16];
             const otherShoulder = landmarks[useLeft ? 12 : 11];
             const torso = Math.max(distance(shoulderMid, hipMid), 0.001);
-            const shoulderWidth = Math.max(distance(landmarks[11], landmarks[12]), 0.001);
+            const shoulderWidth = Math.max(
+                pointTracked(landmarks[11]) && pointTracked(landmarks[12]) ? distance(landmarks[11], landmarks[12]) : torso,
+                0.001
+            );
             const leftAnkle = landmarks[27];
             const rightAnkle = landmarks[28];
-            const leftLift = hipMid.y - leftAnkle.y;
-            const rightLift = hipMid.y - rightAnkle.y;
-            const ankleAsync = Math.abs(leftLift - rightLift) / torso;
-            const ankleForwardAsync = Math.abs(leftAnkle.x - rightAnkle.x) / torso;
+            const dualAnklesVisible = pointVisible(leftAnkle) && pointVisible(rightAnkle);
+            const leftLift = dualAnklesVisible ? hipMid.y - leftAnkle.y : 0;
+            const rightLift = dualAnklesVisible ? hipMid.y - rightAnkle.y : 0;
+            const ankleAsync = dualAnklesVisible ? Math.abs(leftLift - rightLift) / torso : 0;
+            const ankleForwardAsync = dualAnklesVisible ? Math.abs(leftAnkle.x - rightAnkle.x) / torso : 0;
+            const referenceShoulder = pointTracked(otherShoulder) ? otherShoulder : shoulder;
             return {
+                side,
                 hipMid,
                 ankle,
                 wrist,
@@ -1565,11 +1595,12 @@
                 kneeAngle: getAngle(hip, knee, ankle),
                 hipAngle: getAngle(shoulder, hip, knee),
                 armLift: (shoulder.y - wrist.y) / torso,
-                wristBack: Math.abs(wrist.x - otherShoulder.x) / shoulderWidth,
+                wristBack: Math.abs(wrist.x - referenceShoulder.x) / shoulderWidth,
                 heelLead: (heel.y - footIndex.y) / torso,
                 ankleAsync,
                 ankleForwardAsync,
-                lowerBodyVisible: [23, 24, 25, 26, 27, 28, 29, 30, 31, 32].every(index => pointVisible(landmarks[index]))
+                lowerBodyVisible: sideRequiredVisible(landmarks, side),
+                dualAnklesVisible
             };
         }
 
@@ -1818,7 +1849,8 @@
                 landingKneeAngle: 180,
                 maxHeelLead: -1,
                 maxAnkleAsync: 0,
-                maxAnkleForwardAsync: 0
+                maxAnkleForwardAsync: 0,
+                hasSyncSample: false
             };
             app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
             updateFeedback('进入预摆阶段', '继续下蹲预摆，准备快速蹬地起跳。', 'PRELOAD');
@@ -1944,8 +1976,11 @@
             app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
             app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX) / torsoRef);
             const ankleLift = (app.attempt.baselineAnkleY - features.ankle.y) / torsoRef;
-            app.attempt.maxAnkleAsync = Math.max(app.attempt.maxAnkleAsync, features.ankleAsync);
-            app.attempt.maxAnkleForwardAsync = Math.max(app.attempt.maxAnkleForwardAsync, features.ankleForwardAsync);
+            if (features.dualAnklesVisible) {
+                app.attempt.hasSyncSample = true;
+                app.attempt.maxAnkleAsync = Math.max(app.attempt.maxAnkleAsync, features.ankleAsync);
+                app.attempt.maxAnkleForwardAsync = Math.max(app.attempt.maxAnkleForwardAsync, features.ankleForwardAsync);
+            }
             if (app.attempt.maxRise >= JUMP_CONFIG.takeoffRise && (ankleLift > JUMP_CONFIG.takeoffRise || app.attempt.maxForward >= JUMP_CONFIG.minFlightForward)) {
                 app.confirmFrames.flight += 1;
                 if (app.confirmFrames.flight >= JUMP_CONFIG.flightConfirmFrames) {
@@ -1957,7 +1992,7 @@
                 app.confirmFrames.flight = 0;
             }
             if (getPhaseElapsedMs() > JUMP_CONFIG.takeoffTimeoutMs) {
-                if (app.attempt.maxAnkleAsync > JUMP_CONFIG.doubleTakeoffSyncRatio || app.attempt.maxAnkleForwardAsync > JUMP_CONFIG.doubleTakeoffSyncRatio) {
+                if (app.attempt.hasSyncSample && (app.attempt.maxAnkleAsync > JUMP_CONFIG.doubleTakeoffSyncRatio || app.attempt.maxAnkleForwardAsync > JUMP_CONFIG.doubleTakeoffSyncRatio)) {
                     recordFailure('double_takeoff_async');
                 } else {
                     recordFailure(app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise ? 'arm_weak' : 'takeoff_weak');

@@ -1,5 +1,9 @@
 (function (global) {
     const REQUIRED_POINTS = [23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
+    const SIDE_REQUIRED_POINTS = {
+        left: [11, 15, 23, 25, 27, 29, 31],
+        right: [12, 16, 24, 26, 28, 30, 32]
+    };
 
     const JUMP_CONFIG = {
         minVisibility: 0.45,
@@ -51,8 +55,28 @@
         return point && typeof point.x === 'number' && typeof point.y === 'number' && (point.visibility == null || point.visibility >= minVisibility);
     }
 
+    function pointTracked(point) {
+        return point && typeof point.x === 'number' && typeof point.y === 'number';
+    }
+
+    function sideRequiredVisible(landmarks, side, minVisibility = JUMP_CONFIG.minVisibility) {
+        return SIDE_REQUIRED_POINTS[side].every(index => pointVisible(landmarks[index], minVisibility));
+    }
+
+    function coreTracked(landmarks) {
+        return [11, 12, 23, 24].every(index => pointTracked(landmarks[index]));
+    }
+
+    function resolveTrackedSide(landmarks, minVisibility = JUMP_CONFIG.minVisibility) {
+        const preferredSide = getVisibleSide(landmarks);
+        if (coreTracked(landmarks) && sideRequiredVisible(landmarks, preferredSide, minVisibility)) return preferredSide;
+        const fallbackSide = preferredSide === 'left' ? 'right' : 'left';
+        if (coreTracked(landmarks) && sideRequiredVisible(landmarks, fallbackSide, minVisibility)) return fallbackSide;
+        return null;
+    }
+
     function allRequiredVisible(landmarks, minVisibility = JUMP_CONFIG.minVisibility) {
-        return REQUIRED_POINTS.every(index => pointVisible(landmarks[index], minVisibility));
+        return !!resolveTrackedSide(landmarks, minVisibility);
     }
 
     function midpoint(a, b) {
@@ -123,10 +147,10 @@
     }
 
     function extractFeatures(landmarks, config = JUMP_CONFIG) {
-        if (!allRequiredVisible(landmarks, config.minVisibility)) return null;
+        const side = resolveTrackedSide(landmarks, config.minVisibility);
+        if (!side) return null;
         const hipMid = midpoint(landmarks[23], landmarks[24]);
         const shoulderMid = midpoint(landmarks[11], landmarks[12]);
-        const side = getVisibleSide(landmarks);
         const useLeft = side === 'left';
         const hip = landmarks[useLeft ? 23 : 24];
         const knee = landmarks[useLeft ? 25 : 26];
@@ -137,11 +161,16 @@
         const wrist = landmarks[useLeft ? 15 : 16];
         const otherShoulder = landmarks[useLeft ? 12 : 11];
         const torso = Math.max(distance(shoulderMid, hipMid), 0.001);
-        const shoulderWidth = Math.max(distance(landmarks[11], landmarks[12]), 0.001);
+        const shoulderWidth = Math.max(
+            pointTracked(landmarks[11]) && pointTracked(landmarks[12]) ? distance(landmarks[11], landmarks[12]) : torso,
+            0.001
+        );
         const leftAnkle = landmarks[27];
         const rightAnkle = landmarks[28];
-        const leftLift = hipMid.y - leftAnkle.y;
-        const rightLift = hipMid.y - rightAnkle.y;
+        const dualAnklesVisible = pointVisible(leftAnkle, config.minVisibility) && pointVisible(rightAnkle, config.minVisibility);
+        const leftLift = dualAnklesVisible ? hipMid.y - leftAnkle.y : 0;
+        const rightLift = dualAnklesVisible ? hipMid.y - rightAnkle.y : 0;
+        const referenceShoulder = pointTracked(otherShoulder) ? otherShoulder : shoulder;
         return {
             side,
             hipMid,
@@ -156,11 +185,12 @@
             kneeAngle: getAngle(hip, knee, ankle),
             hipAngle: getAngle(shoulder, hip, knee),
             armLift: (shoulder.y - wrist.y) / torso,
-            wristBack: Math.abs(wrist.x - otherShoulder.x) / shoulderWidth,
+            wristBack: Math.abs(wrist.x - referenceShoulder.x) / shoulderWidth,
             heelLead: (heel.y - footIndex.y) / torso,
-            ankleAsync: Math.abs(leftLift - rightLift) / torso,
-            ankleForwardAsync: Math.abs(leftAnkle.x - rightAnkle.x) / torso,
-            lowerBodyVisible: REQUIRED_POINTS.every(index => pointVisible(landmarks[index], config.minVisibility))
+            ankleAsync: dualAnklesVisible ? Math.abs(leftLift - rightLift) / torso : 0,
+            ankleForwardAsync: dualAnklesVisible ? Math.abs(leftAnkle.x - rightAnkle.x) / torso : 0,
+            lowerBodyVisible: sideRequiredVisible(landmarks, side, config.minVisibility),
+            dualAnklesVisible
         };
     }
 
@@ -235,7 +265,8 @@
             landingKneeAngle: 180,
             maxHeelLead: -1,
             maxAnkleAsync: 0,
-            maxAnkleForwardAsync: 0
+            maxAnkleForwardAsync: 0,
+            hasSyncSample: false
         };
     }
 
@@ -287,6 +318,7 @@
         JUMP_CONFIG,
         ISSUE_META,
         pointVisible,
+        pointTracked,
         allRequiredVisible,
         midpoint,
         distance,
