@@ -767,8 +767,12 @@
             landingKneeMax: 150,
             landingTimeoutMs: 900,
             roundCooldownFrames: 18,
+            rearmHoldFrames: 8,
             stableMotionThreshold: 0.02,
             heelLeadMin: -0.09,
+            earlyAttemptKneeMax: 158,
+            earlyAttemptHipMax: 154,
+            earlyAttemptDepthRatio: 0.018,
             targetTrackRatio: 1.35,
             targetTorsoMinRatio: 0.72,
             targetTorsoMaxRatio: 1.38,
@@ -821,6 +825,8 @@
             attemptStartedAt: 0,
             readyFrames: 0,
             cooldownFrames: 0,
+            awaitingReset: false,
+            rearmFrames: 0,
             stableFrames: 0,
             prevHipX: null,
             prevHipY: null,
@@ -1618,6 +1624,8 @@
             app.attemptStartedAt = 0;
             app.readyFrames = 0;
             app.cooldownFrames = 0;
+            app.awaitingReset = false;
+            app.rearmFrames = 0;
             app.stableFrames = 0;
             app.prevHipX = null;
             app.prevHipY = null;
@@ -1639,6 +1647,24 @@
 
         function updateCounters() {
             practiceCountEl.textContent = app.round ? app.round.practiceCount : 0;
+        }
+
+        function refreshBaseline(features) {
+            if (!app.baseline) {
+                app.baseline = {
+                    hipY: features.hipMid.y,
+                    hipX: features.hipMid.x,
+                    ankleY: features.ankle.y,
+                    wristY: features.wrist.y,
+                    torso: features.torso
+                };
+                return;
+            }
+            app.baseline.hipY = app.baseline.hipY * 0.85 + features.hipMid.y * 0.15;
+            app.baseline.hipX = app.baseline.hipX * 0.85 + features.hipMid.x * 0.15;
+            app.baseline.ankleY = app.baseline.ankleY * 0.85 + features.ankle.y * 0.15;
+            app.baseline.wristY = app.baseline.wristY * 0.85 + features.wrist.y * 0.15;
+            app.baseline.torso = app.baseline.torso * 0.85 + features.torso * 0.15;
         }
 
         function setPhase(phase) {
@@ -1690,6 +1716,17 @@
             );
         }
 
+        function hasStrongAttemptSignal(features) {
+            if (!app.baseline) return false;
+            const torsoRef = Math.max(app.baseline.torso || features.torso || 0.001, 0.001);
+            const hipDrop = (features.hipMid.y - app.baseline.hipY) / torsoRef;
+            return (
+                features.kneeAngle <= JUMP_CONFIG.earlyAttemptKneeMax ||
+                features.hipAngle <= JUMP_CONFIG.earlyAttemptHipMax ||
+                hipDrop >= JUMP_CONFIG.earlyAttemptDepthRatio
+            );
+        }
+
         function updateTargetLock(features) {
             if (!app.targetLock) {
                 app.targetLock = {
@@ -1724,12 +1761,8 @@
 
         function recordSimpleFailure(reasonCode, phase) {
             if (!app.round) return;
-            app.round.practiceCount += 1;
-            app.round.failedCount += 1;
-            incrementReason(app.round.failReasons, reasonCode);
-            updateCounters();
             updateFeedback(`本次未成功：${ISSUE_META[reasonCode].label}`, ISSUE_META[reasonCode].tip, phase || 'READY');
-            app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
+            app.cooldownFrames = Math.max(app.cooldownFrames, 6);
         }
 
         function pickSuggestion() {
@@ -1794,6 +1827,9 @@
             app.attempt = null;
             app.attemptStartedAt = 0;
             app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
+            app.awaitingReset = true;
+            app.rearmFrames = 0;
+            app.readyFrames = 0;
             app.targetGraceFrames = 0;
             app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
             setPhase('READY');
@@ -1814,6 +1850,9 @@
             app.attempt = null;
             app.attemptStartedAt = 0;
             app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
+            app.awaitingReset = true;
+            app.rearmFrames = 0;
+            app.readyFrames = 0;
             app.targetGraceFrames = 0;
             app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
             setPhase('READY');
@@ -1822,16 +1861,31 @@
         function updateBaseline(features) {
             const motion = app.prevHipY == null ? 0 : Math.abs(features.hipMid.y - app.prevHipY) + Math.abs(features.hipMid.x - app.prevHipX);
             app.stableFrames = motion < JUMP_CONFIG.stableMotionThreshold ? app.stableFrames + 1 : 0;
-            if (features.kneeAngle >= JUMP_CONFIG.readyKneeMin && features.hipAngle >= JUMP_CONFIG.readyHipMin && app.stableFrames >= 2) {
-                app.readyFrames += 1;
-                if (!app.baseline) app.baseline = { hipY: features.hipMid.y, hipX: features.hipMid.x, ankleY: features.ankle.y, wristY: features.wrist.y, torso: features.torso };
-                else {
-                    app.baseline.hipY = app.baseline.hipY * 0.85 + features.hipMid.y * 0.15;
-                    app.baseline.hipX = app.baseline.hipX * 0.85 + features.hipMid.x * 0.15;
-                    app.baseline.ankleY = app.baseline.ankleY * 0.85 + features.ankle.y * 0.15;
-                    app.baseline.wristY = app.baseline.wristY * 0.85 + features.wrist.y * 0.15;
-                    app.baseline.torso = app.baseline.torso * 0.85 + features.torso * 0.15;
+            const isReadyPose = features.kneeAngle >= JUMP_CONFIG.readyKneeMin && features.hipAngle >= JUMP_CONFIG.readyHipMin;
+            const isStableReady = isReadyPose && app.stableFrames >= 2;
+
+            if (isStableReady) {
+                refreshBaseline(features);
+            }
+
+            if (app.awaitingReset) {
+                if (isStableReady) {
+                    app.rearmFrames += 1;
+                    if (app.rearmFrames >= JUMP_CONFIG.rearmHoldFrames) {
+                        app.awaitingReset = false;
+                        app.rearmFrames = 0;
+                        app.readyFrames = JUMP_CONFIG.readyHoldFrames;
+                        if (!app.attempt) updateFeedback('已回到起始站姿', '可以开始下一次完整动作。', 'READY');
+                    }
+                } else {
+                    app.rearmFrames = 0;
+                    if (!app.attempt) app.readyFrames = 0;
                 }
+                return;
+            }
+
+            if (isStableReady) {
+                app.readyFrames += 1;
                 if (app.readyFrames >= JUMP_CONFIG.readyHoldFrames) updateFeedback('已准备好，先下蹲预摆再起跳', '请保持侧身、全身入镜，完成完整跳远动作。', 'READY');
                 if (app.phase === 'IDLE') setPhase('READY');
             } else if (!app.attempt) {
@@ -1840,9 +1894,13 @@
         }
 
         function handleReady(features) {
+            if (app.awaitingReset) {
+                updateFeedback('先回到起始站姿', '落地站稳后，再开始下一次完整动作。', 'READY');
+                return;
+            }
             if (app.readyFrames < JUMP_CONFIG.readyHoldFrames) {
-                if (hasAttemptSignal(features) && app.cooldownFrames === 0) {
-                    recordSimpleFailure('not_ready', 'READY');
+                if (app.baseline && hasStrongAttemptSignal(features) && app.cooldownFrames === 0) {
+                    beginAttempt();
                     return;
                 }
                 updateFeedback('先站稳准备', '请侧身站立，双脚完整入镜，保持 1 秒稳定。', 'READY');
