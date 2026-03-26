@@ -1161,6 +1161,14 @@
             const topReasonsText = app.round ? buildTopReasonText(app.round.failReasons) : '';
             const improvementText = app.round ? buildTopReasonText(app.round.improvementReasons) : '';
             const suggestion = app.round ? pickSuggestion() : '动作整体较完整，下一轮继续保持。';
+            let summaryText = `本轮共练习 ${practiceCount} 次。主要问题：${topReasonsText || '暂未发现明显动作问题'}。训练建议：${suggestion}`;
+            if (practiceCount === 0) {
+                summaryText = '本轮尚未开始，暂无有效练习记录。先点击开始分析，再完成至少一次完整动作。';
+            } else if (!topReasonsText && improvementText) {
+                summaryText = `本轮共练习 ${practiceCount} 次。重点优化：${improvementText}。训练建议：${suggestion}`;
+            } else if (!topReasonsText && !improvementText) {
+                summaryText = `本轮共练习 ${practiceCount} 次。整体动作较完整。训练建议：${suggestion}`;
+            }
             return {
                 practiceCount,
                 successCount,
@@ -1168,7 +1176,7 @@
                 topReasonsText,
                 improvementText,
                 suggestion,
-                summaryText: `本轮练习 ${practiceCount} 次，成功 ${successCount} 次，未成功 ${failedCount} 次。主要问题：${topReasonsText || '未发现明显失败原因'}。继续优化：${improvementText || '整体动作较完整'}。下一轮建议：${suggestion}`
+                summaryText
             };
         }
 
@@ -1278,8 +1286,8 @@
 
         function renderHistoryItem(record) {
             const practiceCount = Number.isFinite(record.practiceCount) ? record.practiceCount : (Number(record.successCount || 0) + Number(record.failedCount || 0));
-            const summaryLine = record.summaryText || `本轮练习 ${practiceCount || 0} 次，成功 ${record.successCount || 0} 次，未成功 ${record.failedCount || 0} 次。`;
-            const topReasonsText = record.topReasonsText || '本轮动作较完整';
+            const summaryLine = record.summaryText || `本轮共练习 ${practiceCount || 0} 次。`;
+            const topReasonsText = record.topReasonsText || record.improvementText || '本轮没有明显动作问题';
             const suggestion = record.suggestion || '继续保持当前节奏。';
             const tags = [record.className, record.groupName, record.sessionLabel].filter(Boolean).join(' / ');
             return `
@@ -1287,7 +1295,7 @@
                 ${tags ? `<div class="time">${tags}</div>` : ''}
                 <div class="result">
                     <strong>${summaryLine}</strong><br>
-                    主要分析：${topReasonsText}<br>
+                    主要问题：${topReasonsText}<br>
                     训练建议：${suggestion}
                 </div>
             `;
@@ -1778,11 +1786,11 @@
 
         function renderRoundSummary() {
             if (!app.round) return;
+            const analysis = buildRoundAnalysis();
             roundSummary.innerHTML = `
-                <div class="summary-card"><strong>本轮结果</strong><p>成功 ${app.round.successCount} 次，未成功 ${app.round.failedCount} 次。</p></div>
-                <div class="summary-card"><strong>主要问题</strong><p>${buildTopReasonText(app.round.failReasons) || '本轮没有明显失败原因。'}</p></div>
-                <div class="summary-card"><strong>成功后仍可优化</strong><p>${buildTopReasonText(app.round.improvementReasons) || '本轮成功动作整体较完整。'}</p></div>
-                <div class="summary-card"><strong>下一轮建议</strong><p>${pickSuggestion()}</p></div>
+                <div class="summary-card"><strong>练习次数</strong><p>本轮共练习 ${analysis.practiceCount} 次。</p></div>
+                <div class="summary-card"><strong>主要问题</strong><p>${analysis.topReasonsText || analysis.improvementText || '本轮没有明显动作问题。'}</p></div>
+                <div class="summary-card"><strong>训练建议</strong><p>${analysis.suggestion}</p></div>
             `;
         }
 
@@ -2353,11 +2361,11 @@
 
         function renderRoundSummary() {
             if (!app.round) return;
+            const analysis = buildRoundAnalysis();
             roundSummary.innerHTML = `
-                <div class="summary-card"><strong>本轮结果</strong><p>本轮共练习 ${app.round.practiceCount} 次。</p></div>
-                <div class="summary-card"><strong>主要指导</strong><p>${buildTopReasonText(app.round.failReasons) || '本轮没有明显动作问题。'}</p></div>
-                <div class="summary-card"><strong>继续保持</strong><p>${buildTopReasonText(app.round.improvementReasons) || '整体动作较完整，继续保持预摆、蹬伸和落地缓冲节奏。'}</p></div>
-                <div class="summary-card"><strong>下一轮建议</strong><p>${pickSuggestion()}</p></div>
+                <div class="summary-card"><strong>练习次数</strong><p>本轮共练习 ${analysis.practiceCount} 次。</p></div>
+                <div class="summary-card"><strong>主要问题</strong><p>${analysis.topReasonsText || analysis.improvementText || '本轮没有明显动作问题。'}</p></div>
+                <div class="summary-card"><strong>训练建议</strong><p>${analysis.suggestion}</p></div>
             `;
         }
 
