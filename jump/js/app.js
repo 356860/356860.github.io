@@ -1,6 +1,7 @@
 ﻿import {
     JUMP_CONFIG,
     ISSUE_META,
+    NON_ACTION_REASON_CODES,
     extractFeatures as coreExtractFeatures,
     smoothFeatures as coreSmoothFeatures,
     createRoundState,
@@ -422,9 +423,16 @@ const app = {
                 improvementText: analysis.improvementText,
                 suggestion: analysis.suggestion,
                 summaryText: analysis.summaryText,
+                hasActionFeedback: analysis.hasActionFeedback,
                 syncStatus: 'pending',
                 source: 'jump-web'
             };
+        }
+
+        function shouldPersistRoundRecord(record) {
+            if (!record) return false;
+            if (!Number(record.practiceCount || 0)) return false;
+            return record.hasActionFeedback === true;
         }
 
         function buildSupabasePayload(record) {
@@ -509,8 +517,8 @@ const app = {
         function renderHistoryItem(record) {
             const practiceCount = Number.isFinite(record.practiceCount) ? record.practiceCount : (Number(record.successCount || 0) + Number(record.failedCount || 0));
             const summaryLine = record.summaryText || `本轮共练习 ${practiceCount || 0} 次。`;
-            const topReasonsText = record.topReasonsText || record.improvementText || '本轮没有明显动作问题';
-            const suggestion = record.suggestion || '继续保持当前节奏。';
+            const topReasonsText = record.topReasonsText || record.improvementText || '本轮未形成可用动作指导';
+            const suggestion = record.suggestion || '请保证全身完整入镜后，再进行一次完整动作。';
             const tags = [record.className, record.groupName, record.sessionLabel].filter(Boolean).join(' / ');
             return `
                 <div class="time">${record.time || ''}</div>
@@ -1052,15 +1060,15 @@ const app = {
             const analysis = buildRoundAnalysis();
             roundSummary.innerHTML = `
                 <div class="summary-card"><strong>练习次数</strong><p>本轮共练习 ${analysis.practiceCount} 次。</p></div>
-                <div class="summary-card"><strong>主要问题</strong><p>${analysis.topReasonsText || analysis.improvementText || '本轮没有明显动作问题。'}</p></div>
-                <div class="summary-card"><strong>训练建议</strong><p>${analysis.suggestion}</p></div>
+                <div class="summary-card"><strong>主要问题</strong><p>${analysis.topReasonsText || analysis.improvementText || '本轮未形成可用动作指导。'}</p></div>
+                <div class="summary-card"><strong>训练建议</strong><p>${analysis.suggestion || '请保证全身完整入镜后，再进行一次完整动作。'}</p></div>
             `;
         }
 
         function saveRoundHistory() {
             if (!app.round) return;
-            if (!Number(app.round.practiceCount || 0)) return;
             const record = buildRoundRecord();
+            if (!shouldPersistRoundRecord(record)) return;
             app.students[app.currentStudent].push(record);
             saveStudents();
             renderHistory();
@@ -1080,7 +1088,7 @@ const app = {
             if (counted) {
                 app.round.practiceCount += 1;
                 app.round.failedCount += 1;
-                incrementReason(app.round.failReasons, reasonCode);
+                if (!NON_ACTION_REASON_CODES.includes(reasonCode)) incrementReason(app.round.failReasons, reasonCode);
                 updateCounters();
             }
             playTone('warning');

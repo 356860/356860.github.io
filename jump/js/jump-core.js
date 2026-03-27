@@ -5,6 +5,8 @@ export const SIDE_REQUIRED_POINTS = {
     right: [12, 16, 24, 26, 28, 30, 32]
 };
 
+export const NON_ACTION_REASON_CODES = ['not_ready', 'keypoint_lost', 'target_size_drift'];
+
 export const JUMP_CONFIG = {
     minVisibility: 0.45,
     emaAlpha: 0.3,
@@ -295,8 +297,14 @@ export function incrementReason(bucket, code) {
     bucket[code] = (bucket[code] || 0) + 1;
 }
 
+export function filterActionReasons(bucket) {
+    return Object.fromEntries(
+        Object.entries(bucket || {}).filter(([code, count]) => !NON_ACTION_REASON_CODES.includes(code) && Number(count) > 0)
+    );
+}
+
 export function topReasonEntries(bucket) {
-    return Object.entries(bucket).sort((a, b) => b[1] - a[1]).slice(0, 2);
+    return Object.entries(bucket || {}).sort((a, b) => b[1] - a[1]).slice(0, 2);
 }
 
 export function buildTopReasonText(bucket, issueMeta = ISSUE_META) {
@@ -306,10 +314,10 @@ export function buildTopReasonText(bucket, issueMeta = ISSUE_META) {
 }
 
 export function pickSuggestion(round, mode, issueMeta = ISSUE_META) {
-    const failTop = topReasonEntries(round.failReasons);
+    const failTop = topReasonEntries(filterActionReasons(round?.failReasons || {}));
     if (failTop.length > 0) return issueMeta[failTop[0][0]].advice;
 
-    const improveTop = topReasonEntries(round.improvementReasons);
+    const improveTop = topReasonEntries(filterActionReasons(round?.improvementReasons || {}));
     if (improveTop.length > 0) return `已经完成动作，下一轮重点优化：${issueMeta[improveTop[0][0]].label}。`;
 
     if (mode === 'arms') return '继续练大臂后摆到前上摆的完整节奏。';
@@ -322,17 +330,24 @@ export function buildRoundAnalysis(round, mode, issueMeta = ISSUE_META) {
     const successCount = Number(round?.successCount || 0);
     const failedCount = Number(round?.failedCount || 0);
     const practiceCount = Number(round?.practiceCount || successCount + failedCount);
-    const topReasonsText = buildTopReasonText(round?.failReasons || {}, issueMeta);
-    const improvementText = buildTopReasonText(round?.improvementReasons || {}, issueMeta);
-    const suggestion = round ? pickSuggestion(round, mode, issueMeta) : '动作整体较完整，下一轮继续保持。';
+    const actionFailReasons = filterActionReasons(round?.failReasons || {});
+    const actionImproveReasons = filterActionReasons(round?.improvementReasons || {});
+    const topReasonsText = buildTopReasonText(actionFailReasons, issueMeta);
+    const improvementText = buildTopReasonText(actionImproveReasons, issueMeta);
+    const hasActionFeedback = Boolean(topReasonsText || improvementText);
+    const suggestion = hasActionFeedback
+        ? pickSuggestion({ failReasons: actionFailReasons, improvementReasons: actionImproveReasons }, mode, issueMeta)
+        : '';
 
-    let summaryText = `本轮共练习 ${practiceCount} 次。主要问题：${topReasonsText || '暂无明显动作问题'}。训练建议：${suggestion}`;
+    let summaryText = '';
     if (practiceCount === 0) {
-        summaryText = '本轮尚未开始，暂无有效练习记录。先点击开始分析，再完成至少一次完整动作。';
-    } else if (!topReasonsText && improvementText) {
+        summaryText = '本轮尚未开始，暂无有效练习记录。';
+    } else if (topReasonsText) {
+        summaryText = `本轮共练习 ${practiceCount} 次。主要问题：${topReasonsText}。训练建议：${suggestion}`;
+    } else if (improvementText) {
         summaryText = `本轮共练习 ${practiceCount} 次。重点优化：${improvementText}。训练建议：${suggestion}`;
-    } else if (!topReasonsText && !improvementText) {
-        summaryText = `本轮共练习 ${practiceCount} 次。整体动作较完整。训练建议：${suggestion}`;
+    } else {
+        summaryText = `本轮共练习 ${practiceCount} 次。`;
     }
 
     return {
@@ -342,6 +357,9 @@ export function buildRoundAnalysis(round, mode, issueMeta = ISSUE_META) {
         topReasonsText,
         improvementText,
         suggestion,
-        summaryText
+        summaryText,
+        hasActionFeedback,
+        actionFailReasons,
+        actionImproveReasons
     };
 }
