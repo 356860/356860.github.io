@@ -48,15 +48,26 @@ export const JUMP_CONFIG = {
     gestureArmStraightMin: 152,
     frontShoulderRatioMin: 0.56,
     sideTransitionTimeoutMs: 1800,
-    sideReadyFrames: 3
+    sideReadyFrames: 3,
+    takeoffAngleLowRatio: 0.72,
+    takeoffAngleHighRatio: 1.45,
+    pushoffWeakRise: 0.012,
+    pushoffWeakForward: 0.016,
+    armLegAsyncFrames: 5,
+    flightHipExtensionMin: 156
 };
 
 export const ISSUE_META = {
     not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站姿 1 秒，再做完整预摆和起跳。' },
     preload_weak: { label: '预摆不足', tip: '预摆再深一点，膝和髋要一起下沉。', advice: '下一轮先做 3 次慢预摆，再做完整动作。' },
     takeoff_weak: { label: '蹬伸不充分', tip: '起跳时膝髋要更快伸展。', advice: '蹬地时注意伸髋伸膝，向前上方发力。' },
+    pushoff_weak: { label: '蹬地力量不足', tip: '蹬地时继续快速伸髋伸膝，把身体送出去。', advice: '先做 5 次快速蹬伸练习，再做完整跳远，体会脚掌快速发力。' },
+    takeoff_angle_low: { label: '起跳角度偏低', tip: '起跳时注意向前上方送髋，不要只向前冲。', advice: '练习预摆后向前上方蹬伸，体会向上和向前同时发力。' },
+    takeoff_angle_high: { label: '起跳角度偏高', tip: '起跳时不要只向上窜，注意向前送髋。', advice: '下一轮注意前送身体，减少只向上起跳的感觉。' },
     arm_weak: { label: '摆臂不积极', tip: '双臂从后向前上方快速摆起。', advice: '练习大臂后摆到前上摆，带动起跳节奏。' },
+    arm_leg_async: { label: '摆臂与蹬地不同步', tip: '摆臂和蹬地要同时快速发力。', advice: '先做摆臂加蹬伸分解练习，用口令把手臂和腿部发力对齐。' },
     flight_short: { label: '腾空前送不足', tip: '蹬地后继续向前送髋。', advice: '下次蹬地更完整，让身体前移更明显。' },
+    flight_no_arch: { label: '腾空未挺身', tip: '腾空后上体和髋部要主动伸展。', advice: '做原地挺身模仿和短距离腾空练习，体会展体动作。' },
     landing_stiff: { label: '落地缓冲不足', tip: '落地时主动屈膝缓冲。', advice: '脚跟落地后及时屈膝收髋，减小冲击。' },
     heel_late: { label: '落地脚跟不明显', tip: '脚跟先接触，再过渡到全脚掌。', advice: '多做小跳缓冲练习，体会脚跟先着地。' },
     keypoint_lost: { label: '入镜不完整', tip: '请保持全身完整入镜。', advice: '调整站位，保证双脚和双手都能被看到。' },
@@ -288,6 +299,10 @@ export function createAttemptState(baseline) {
         maxHeelLead: -1,
         maxAnkleAsync: 0,
         maxAnkleForwardAsync: 0,
+        maxFlightHipAngle: 0,
+        armPeakFrame: null,
+        takeoffFrame: null,
+        sampleFrame: 0,
         hasSyncSample: false,
         committed: false
     };

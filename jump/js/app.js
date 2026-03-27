@@ -840,6 +840,48 @@ const app = {
             if (app.attempt) app.attempt.committed = true;
         }
 
+        function tickAttemptSample() {
+            if (!app.attempt) return;
+            app.attempt.sampleFrame = (app.attempt.sampleFrame || 0) + 1;
+        }
+
+        function updateAttemptArmPeak(armLiftValue) {
+            if (!app.attempt) return;
+            if (!Number.isFinite(armLiftValue)) return;
+            if (armLiftValue > app.attempt.maxArmLift) {
+                app.attempt.maxArmLift = armLiftValue;
+                app.attempt.armPeakFrame = app.attempt.sampleFrame;
+            }
+        }
+
+        function enrichAttemptDiagnostics() {
+            if (!app.round || !app.attempt) return;
+            const forward = Math.max(app.attempt.maxForward || 0, 0);
+            const rise = Math.max(app.attempt.maxRise || 0, 0);
+            const angleRatio = rise / Math.max(forward, 0.0001);
+            const hasTakeoffEvidence = rise >= JUMP_CONFIG.takeoffRise * 0.75 || forward >= JUMP_CONFIG.minFlightForward * 0.75;
+
+            if (hasTakeoffEvidence) {
+                if (rise < JUMP_CONFIG.pushoffWeakRise && forward < JUMP_CONFIG.pushoffWeakForward) {
+                    incrementReason(app.round.improvementReasons, 'pushoff_weak');
+                } else if (forward >= JUMP_CONFIG.minFlightForward * 0.75 && angleRatio < JUMP_CONFIG.takeoffAngleLowRatio) {
+                    incrementReason(app.round.improvementReasons, 'takeoff_angle_low');
+                } else if (rise >= JUMP_CONFIG.takeoffRise * 0.9 && angleRatio > JUMP_CONFIG.takeoffAngleHighRatio) {
+                    incrementReason(app.round.improvementReasons, 'takeoff_angle_high');
+                }
+            }
+
+            if (Number.isFinite(app.attempt.armPeakFrame) && Number.isFinite(app.attempt.takeoffFrame)) {
+                if (Math.abs(app.attempt.armPeakFrame - app.attempt.takeoffFrame) > JUMP_CONFIG.armLegAsyncFrames) {
+                    incrementReason(app.round.improvementReasons, 'arm_leg_async');
+                }
+            }
+
+            if (forward >= JUMP_CONFIG.minFlightForward * 0.75 && app.attempt.maxFlightHipAngle > 0 && app.attempt.maxFlightHipAngle < JUMP_CONFIG.flightHipExtensionMin) {
+                incrementReason(app.round.improvementReasons, 'flight_no_arch');
+            }
+        }
+
         function shouldCountFailure(reasonCode) {
             if (!app.attempt) return false;
             if (app.attempt.committed) return true;
@@ -1108,8 +1150,10 @@ const app = {
             app.round.successCount += 1;
             if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth + 0.01) incrementReason(app.round.improvementReasons, 'preload_weak');
             if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise + 0.02) incrementReason(app.round.improvementReasons, 'arm_weak');
+            if (app.attempt.maxRise < JUMP_CONFIG.takeoffRise + 0.002) incrementReason(app.round.improvementReasons, 'takeoff_weak');
             if (app.attempt.landingKneeAngle > 132) incrementReason(app.round.improvementReasons, 'landing_stiff');
             if (app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin) incrementReason(app.round.improvementReasons, 'heel_late');
+            enrichAttemptDiagnostics();
             updateCounters();
             playTone('success');
             finalizeAttemptCycle('本次练习完成', '继续保持预摆、蹬地和脚跟着地的完整节奏。下次请重新正对镜头举手开始。');
@@ -1170,9 +1214,10 @@ const app = {
 
         function handlePreload(features) {
             app.phaseFrames += 1;
+            tickAttemptSample();
             const depthRatio = (features.hipMid.y - app.attempt.baselineHipY) / Math.max(app.attempt.baselineTorso, 0.001);
             app.attempt.maxDepth = Math.max(app.attempt.maxDepth, depthRatio);
-            app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
+            updateAttemptArmPeak(app.attempt.baselineWristY - features.wrist.y);
             if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth * 0.85) {
                 updateFeedback('预摆再深一点', '膝和髋一起下沉，准备快速蹬伸。', 'PRELOAD');
             } else if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise * 0.7) {
@@ -1186,6 +1231,7 @@ const app = {
                 app.confirmFrames.takeoff += 1;
                 if (app.confirmFrames.takeoff >= JUMP_CONFIG.takeoffConfirmFrames) {
                     markAttemptCommitted();
+                    if (!Number.isFinite(app.attempt.takeoffFrame)) app.attempt.takeoffFrame = app.attempt.sampleFrame;
                     updateFeedback('开始蹬伸起跳', '继续快速伸髋伸膝，同时摆臂前上。', 'TAKEOFF');
                     setPhase('TAKEOFF');
                     return;
@@ -1198,10 +1244,11 @@ const app = {
 
         function handleTakeoff(features) {
             app.phaseFrames += 1;
+            tickAttemptSample();
             markAttemptCommitted();
             const torsoRef = Math.max(app.attempt.baselineTorso, 0.001);
             app.attempt.maxRise = Math.max(app.attempt.maxRise, (app.attempt.baselineHipY - features.hipMid.y) / torsoRef);
-            app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
+            updateAttemptArmPeak(app.attempt.baselineWristY - features.wrist.y);
             app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX) / torsoRef);
             const ankleLift = (app.attempt.baselineAnkleY - features.ankle.y) / torsoRef;
             if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise * 0.8) {
@@ -1237,9 +1284,11 @@ const app = {
 
         function handleFlight(features) {
             app.phaseFrames += 1;
+            tickAttemptSample();
             markAttemptCommitted();
             app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX));
             app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            app.attempt.maxFlightHipAngle = Math.max(app.attempt.maxFlightHipAngle || 0, features.hipAngle || 0);
             if (app.attempt.maxForward < JUMP_CONFIG.minFlightForward * 0.8) {
                 updateFeedback('继续向前送髋', '腾空时保持身体前移，不要过早收腿。', 'FLIGHT');
             } else {
@@ -1261,6 +1310,7 @@ const app = {
 
         function handleLanding(features) {
             app.phaseFrames += 1;
+            tickAttemptSample();
             markAttemptCommitted();
             app.attempt.landingKneeAngle = Math.min(app.attempt.landingKneeAngle, features.kneeAngle);
             app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
