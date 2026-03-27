@@ -807,6 +807,27 @@ const app = {
             updateFeedback(main, sub, 'READY');
         }
 
+        function resetAttemptWithoutCounting(main, sub) {
+            app.attempt = null;
+            app.attemptStartedAt = 0;
+            app.cooldownFrames = 0;
+            app.awaitingReset = false;
+            app.rearmFrames = 0;
+            app.readyFrames = JUMP_CONFIG.readyHoldFrames;
+            app.targetGraceFrames = 0;
+            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
+            app.phase = 'READY';
+            app.phaseFrames = 0;
+            app.phaseStartedAt = Date.now();
+            if (usesGestureGate()) {
+                app.gestureStage = GESTURE_STAGE_ARMED;
+                app.gestureHoldFrames = 0;
+                app.transitionStartedAt = 0;
+                app.gestureSideReadyFrames = JUMP_CONFIG.sideReadyFrames;
+            }
+            updateFeedback(main, sub, 'READY');
+        }
+
         function markAttemptCommitted() {
             if (app.attempt) app.attempt.committed = true;
         }
@@ -814,7 +835,7 @@ const app = {
         function shouldCountFailure(reasonCode) {
             if (!app.attempt) return false;
             if (app.attempt.committed) return true;
-            if (reasonCode === 'keypoint_lost' || reasonCode === 'target_size_drift' || reasonCode === 'not_ready') return false;
+            if (reasonCode === 'keypoint_lost' || reasonCode === 'target_size_drift' || reasonCode === 'not_ready' || reasonCode === 'preload_weak') return false;
             return app.phase === 'TAKEOFF' || app.phase === 'FLIGHT' || app.phase === 'LANDING';
         }
 
@@ -1065,8 +1086,10 @@ const app = {
             playTone('warning');
             if (counted) {
                 finalizeAttemptCycle(`本次重点：${ISSUE_META[reasonCode].label}`, `${ISSUE_META[reasonCode].tip} 完成后请重新正对镜头举手开始下一次。`);
+            } else if (reasonCode === 'preload_weak') {
+                resetAttemptWithoutCounting('预摆后再起跳', '预摆可以做 2 到 3 次，等节奏准备好后再一次完成蹬伸起跳。');
             } else {
-                finalizeAttemptCycle('本次未计入练习次数', '动作链还没完整建立，请重新正对镜头举手，再开始一次完整跳远。');
+                resetAttemptWithoutCounting('本次未计入练习次数', '动作链还没完整建立，请保持侧身准备，继续预摆后再起跳。');
             }
         }
 
@@ -1142,9 +1165,6 @@ const app = {
             const depthRatio = (features.hipMid.y - app.attempt.baselineHipY) / Math.max(app.attempt.baselineTorso, 0.001);
             app.attempt.maxDepth = Math.max(app.attempt.maxDepth, depthRatio);
             app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
-            if (app.attempt.maxDepth >= JUMP_CONFIG.minPreloadDepth * 0.7 && app.phaseFrames >= JUMP_CONFIG.preloadMinFrames) {
-                markAttemptCommitted();
-            }
             if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth * 0.85) {
                 updateFeedback('预摆再深一点', '膝和髋一起下沉，准备快速蹬伸。', 'PRELOAD');
             } else if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise * 0.7) {
@@ -1157,6 +1177,7 @@ const app = {
             if (features.kneeAngle >= JUMP_CONFIG.takeoffKneeMin && riseFromDeepest >= JUMP_CONFIG.takeoffRise) {
                 app.confirmFrames.takeoff += 1;
                 if (app.confirmFrames.takeoff >= JUMP_CONFIG.takeoffConfirmFrames) {
+                    markAttemptCommitted();
                     updateFeedback('开始蹬伸起跳', '继续快速伸髋伸膝，同时摆臂前上。', 'TAKEOFF');
                     setPhase('TAKEOFF');
                     return;
