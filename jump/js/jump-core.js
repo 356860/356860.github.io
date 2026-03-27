@@ -286,7 +286,8 @@ export function createAttemptState(baseline) {
         maxHeelLead: -1,
         maxAnkleAsync: 0,
         maxAnkleForwardAsync: 0,
-        hasSyncSample: false
+        hasSyncSample: false,
+        committed: false
     };
 }
 

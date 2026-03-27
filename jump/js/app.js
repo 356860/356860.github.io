@@ -807,6 +807,17 @@ const app = {
             updateFeedback(main, sub, 'READY');
         }
 
+        function markAttemptCommitted() {
+            if (app.attempt) app.attempt.committed = true;
+        }
+
+        function shouldCountFailure(reasonCode) {
+            if (!app.attempt) return false;
+            if (app.attempt.committed) return true;
+            if (reasonCode === 'keypoint_lost' || reasonCode === 'target_size_drift' || reasonCode === 'not_ready') return false;
+            return app.phase === 'TAKEOFF' || app.phase === 'FLIGHT' || app.phase === 'LANDING';
+        }
+
         function handleGestureGate(landmarks) {
             if (!app.training || !usesGestureGate()) return { blocked: false, features: null };
 
@@ -1044,16 +1055,24 @@ const app = {
 
         function recordFailure(reasonCode) {
             if (!app.round || !app.attempt) return;
-            app.round.practiceCount += 1;
-            app.round.failedCount += 1;
-            incrementReason(app.round.failReasons, reasonCode);
-            updateCounters();
+            const counted = shouldCountFailure(reasonCode);
+            if (counted) {
+                app.round.practiceCount += 1;
+                app.round.failedCount += 1;
+                incrementReason(app.round.failReasons, reasonCode);
+                updateCounters();
+            }
             playTone('warning');
-            finalizeAttemptCycle(`本次重点：${ISSUE_META[reasonCode].label}`, `${ISSUE_META[reasonCode].tip} 完成后请重新正对镜头举手开始下一次。`);
+            if (counted) {
+                finalizeAttemptCycle(`本次重点：${ISSUE_META[reasonCode].label}`, `${ISSUE_META[reasonCode].tip} 完成后请重新正对镜头举手开始下一次。`);
+            } else {
+                finalizeAttemptCycle('本次未计入练习次数', '动作链还没完整建立，请重新正对镜头举手，再开始一次完整跳远。');
+            }
         }
 
         function recordSuccess() {
             if (!app.round || !app.attempt) return;
+            markAttemptCommitted();
             app.round.practiceCount += 1;
             app.round.successCount += 1;
             if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth + 0.01) incrementReason(app.round.improvementReasons, 'preload_weak');
@@ -1123,6 +1142,9 @@ const app = {
             const depthRatio = (features.hipMid.y - app.attempt.baselineHipY) / Math.max(app.attempt.baselineTorso, 0.001);
             app.attempt.maxDepth = Math.max(app.attempt.maxDepth, depthRatio);
             app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
+            if (app.attempt.maxDepth >= JUMP_CONFIG.minPreloadDepth * 0.7 && app.phaseFrames >= JUMP_CONFIG.preloadMinFrames) {
+                markAttemptCommitted();
+            }
             if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth * 0.85) {
                 updateFeedback('预摆再深一点', '膝和髋一起下沉，准备快速蹬伸。', 'PRELOAD');
             } else if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise * 0.7) {
@@ -1147,6 +1169,7 @@ const app = {
 
         function handleTakeoff(features) {
             app.phaseFrames += 1;
+            markAttemptCommitted();
             const torsoRef = Math.max(app.attempt.baselineTorso, 0.001);
             app.attempt.maxRise = Math.max(app.attempt.maxRise, (app.attempt.baselineHipY - features.hipMid.y) / torsoRef);
             app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
@@ -1185,6 +1208,7 @@ const app = {
 
         function handleFlight(features) {
             app.phaseFrames += 1;
+            markAttemptCommitted();
             app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX));
             app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
             if (app.attempt.maxForward < JUMP_CONFIG.minFlightForward * 0.8) {
@@ -1208,6 +1232,7 @@ const app = {
 
         function handleLanding(features) {
             app.phaseFrames += 1;
+            markAttemptCommitted();
             app.attempt.landingKneeAngle = Math.min(app.attempt.landingKneeAngle, features.kneeAngle);
             app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
             if (features.heelLead < JUMP_CONFIG.heelLeadMin) {
@@ -1369,7 +1394,7 @@ const app = {
                     if (app.lowerBodyLossFrames > JUMP_CONFIG.maxLowerBodyLossFrames && app.attempt) {
                         recordFailure('keypoint_lost');
                     } else {
-                        updateFeedback('请保持全身完整入镜', ISSUE_META.keypoint_lost.tip, app.phase === 'IDLE' ? 'IDLE' : 'READY');
+                        updateFeedback('请退后站位，让双脚入镜', '跳远指导需要看到双脚、膝和髋，请完整进入镜头后再练习。', app.phase === 'IDLE' ? 'IDLE' : 'READY');
                     }
                 }
                 app.prevHipX = null;
@@ -1382,7 +1407,7 @@ const app = {
             if (!targetStatus.accepted) {
                 if (app.training) {
                     if (app.targetGraceFrames > JUMP_CONFIG.targetGraceFrames) {
-                        updateFeedback('请保持与镜头距离稳定', ISSUE_META.target_size_drift.tip, app.phase === 'IDLE' ? 'IDLE' : app.phase);
+                        updateFeedback('请保持距离稳定', '不要突然靠近或远离镜头，保持侧身全身入镜再继续。', app.phase === 'IDLE' ? 'IDLE' : app.phase);
                         if (app.attempt) {
                             recordFailure('target_size_drift');
                         }
