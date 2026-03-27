@@ -1,4 +1,4 @@
-const CACHE_NAME = 'jump-pwa-v1';
+const CACHE_NAME = 'jump-pwa-v2';
 const APP_SHELL = [
     './',
     './index.html',
@@ -42,6 +42,25 @@ self.addEventListener('fetch', event => {
 
     const url = new URL(request.url);
     if (url.origin !== self.location.origin) return;
+
+    const networkFirst =
+        request.mode === 'navigate' ||
+        url.pathname.endsWith('/index.html') ||
+        url.pathname.endsWith('/manifest.webmanifest') ||
+        url.pathname.includes('/js/');
+
+    if (networkFirst) {
+        event.respondWith(
+            fetch(request).then(response => {
+                if (response && response.status === 200 && response.type === 'basic') {
+                    const responseClone = response.clone();
+                    caches.open(CACHE_NAME).then(cache => cache.put(request, responseClone));
+                }
+                return response;
+            }).catch(() => caches.match(request).then(cached => cached || caches.match('./index.html')))
+        );
+        return;
+    }
 
     if (request.mode === 'navigate') {
         event.respondWith(

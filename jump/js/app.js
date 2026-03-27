@@ -75,6 +75,24 @@ const storageApi = createAppStorage({
     }
 });
 
+const NON_ACTION_TEXTS = Array.from(new Set(
+    NON_ACTION_REASON_CODES.flatMap(code => [
+        ISSUE_META[code]?.label,
+        ISSUE_META[code]?.tip,
+        ISSUE_META[code]?.advice
+    ].filter(Boolean))
+));
+
+const ACTION_TEXTS = Array.from(new Set(
+    Object.keys(ISSUE_META)
+        .filter(code => !NON_ACTION_REASON_CODES.includes(code))
+        .flatMap(code => [
+            ISSUE_META[code]?.label,
+            ISSUE_META[code]?.tip,
+            ISSUE_META[code]?.advice
+        ].filter(Boolean))
+));
+
 const app = {
             ready: false,
             training: false,
@@ -198,6 +216,38 @@ const app = {
             return { ...DEFAULT_STUDENTS };
         }
 
+        function recordHasActionFeedback(record) {
+            if (!record || !Number(record.practiceCount || 0)) return false;
+            if (record.hasActionFeedback === true) return true;
+            if (record.hasActionFeedback === false) return false;
+
+            const texts = [
+                record.topReasonsText,
+                record.improvementText,
+                record.summaryText,
+                record.suggestion
+            ].filter(Boolean).join(' ');
+
+            if (!texts.trim()) return false;
+            if (ACTION_TEXTS.some(text => text && texts.includes(text))) return true;
+            if (NON_ACTION_TEXTS.some(text => text && texts.includes(text))) return false;
+            return Boolean(record.topReasonsText || record.improvementText);
+        }
+
+        function sanitizeStudentRecords(students) {
+            let changed = false;
+            const next = {};
+            const source = students && typeof students === 'object' ? students : DEFAULT_STUDENTS;
+            Object.entries(source).forEach(([name, records]) => {
+                const list = Array.isArray(records) ? records : [];
+                const filtered = list.filter(recordHasActionFeedback);
+                if (filtered.length !== list.length) changed = true;
+                next[name] = filtered;
+            });
+            if (Object.keys(next).length === 0) next['默认学生'] = [];
+            return { students: next, changed };
+        }
+
         function normalizeSessionMeta(value) {
             const fallback = createDefaultSessionMeta();
             const parsed = value && typeof value === 'object' ? value : {};
@@ -210,6 +260,12 @@ const app = {
 
         function normalizeSyncQueue(value) {
             return Array.isArray(value) ? value : [];
+        }
+
+        function sanitizeSyncQueue(queue) {
+            const list = Array.isArray(queue) ? queue : [];
+            const filtered = list.filter(recordHasActionFeedback);
+            return { queue: filtered, changed: filtered.length !== list.length };
         }
 
         function persistState(key, value) {
@@ -639,7 +695,7 @@ const app = {
 
         function renderHistory() {
             historyList.innerHTML = '';
-            const records = app.students[app.currentStudent] || [];
+            const records = (app.students[app.currentStudent] || []).filter(recordHasActionFeedback);
             if (records.length === 0) {
                 historyList.innerHTML = '<div class="history-item"><div class="result">当前学生还没有保存的跳远记录。</div></div>';
                 return;
@@ -1654,7 +1710,8 @@ const app = {
             try {
                 const swUrl = new URL('../service-worker.js', import.meta.url);
                 const scope = new URL('../', import.meta.url).pathname;
-                await navigator.serviceWorker.register(swUrl, { scope });
+                const registration = await navigator.serviceWorker.register(swUrl, { scope, updateViaCache: 'none' });
+                await registration.update();
             } catch (error) {
                 console.warn('Failed to register service worker', error);
             }
@@ -1688,10 +1745,15 @@ const app = {
         async function initApp() {
             await registerServiceWorker();
             const snapshot = await storageApi.init();
-            app.students = normalizeStudents(snapshot[STORAGE_KEY]);
+            const sanitizedStudents = sanitizeStudentRecords(normalizeStudents(snapshot[STORAGE_KEY]));
+            app.students = sanitizedStudents.students;
             audioState.prefs = normalizeAudioPrefs(snapshot[AUDIO_PREFS_KEY]);
-            syncState.queue = normalizeSyncQueue(snapshot[SYNC_QUEUE_KEY]);
+            const sanitizedQueue = sanitizeSyncQueue(normalizeSyncQueue(snapshot[SYNC_QUEUE_KEY]));
+            syncState.queue = sanitizedQueue.queue;
             Object.assign(sessionMeta, normalizeSessionMeta(snapshot[SESSION_META_KEY]));
+
+            if (sanitizedStudents.changed) saveStudents();
+            if (sanitizedQueue.changed) saveSyncQueue();
 
             normalizePracticeUi();
             applyAudioPrefsToUi();
