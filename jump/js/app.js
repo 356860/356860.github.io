@@ -1076,7 +1076,7 @@ const app = {
                 centerDistance > maxDistance
             ) {
                 app.targetGraceFrames += 1;
-                return { accepted: false, reason: 'target_size_drift' };
+                return { accepted: true, drifted: true, reason: 'target_size_drift' };
             }
 
             app.targetLock.hipX = app.targetLock.hipX * 0.78 + features.hipMid.x * 0.22;
@@ -1084,7 +1084,7 @@ const app = {
             app.targetLock.torso = app.targetLock.torso * 0.82 + features.torso * 0.18;
             app.targetLock.side = features.side;
             app.targetGraceFrames = 0;
-            return { accepted: true, reason: null };
+            return { accepted: true, drifted: false, reason: null };
         }
 
         function recordSimpleFailure(reasonCode, phase) {
@@ -1483,16 +1483,8 @@ const app = {
             }
             app.lowerBodyLossFrames = 0;
             const targetStatus = updateTargetLock(features);
-            if (!targetStatus.accepted) {
-                if (app.training) {
-                    if (app.targetGraceFrames > JUMP_CONFIG.targetGraceFrames) {
-                        updateFeedback('请保持距离稳定', '不要突然靠近或远离镜头，保持侧身全身入镜再继续。', app.phase === 'IDLE' ? 'IDLE' : app.phase);
-                        if (app.attempt) {
-                            recordFailure('target_size_drift');
-                        }
-                    }
-                }
-                return;
+            if (targetStatus.drifted && app.training && app.targetGraceFrames > JUMP_CONFIG.targetGraceFrames) {
+                updateFeedback('继续完成动作', '检测到身体位移较大，系统会继续使用已采集动作数据分析。', app.phase === 'IDLE' ? 'READY' : app.phase);
             }
             const stableFeatures = smoothFeatures(features);
             updateBaseline(stableFeatures);
