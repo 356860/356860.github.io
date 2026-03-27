@@ -39,20 +39,27 @@ export const JUMP_CONFIG = {
     targetTorsoMaxRatio: 1.38,
     targetGraceFrames: 4,
     maxLowerBodyLossFrames: 3,
-    doubleTakeoffSyncRatio: 0.025
+    doubleTakeoffSyncRatio: 0.025,
+    gestureHoldFramesMin: 9,
+    gestureHoldFramesMax: 18,
+    gestureArmLiftMin: 0.36,
+    gestureArmStraightMin: 152,
+    frontShoulderRatioMin: 0.56,
+    sideTransitionTimeoutMs: 1800,
+    sideReadyFrames: 3
 };
 
 export const ISSUE_META = {
-    not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站立 1 秒，再做完整预摆和起跳。' },
+    not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站姿 1 秒，再做完整预摆和起跳。' },
     preload_weak: { label: '预摆不足', tip: '预摆再深一点，膝和髋要一起下沉。', advice: '下一轮先做 3 次慢预摆，再做完整动作。' },
-    takeoff_weak: { label: '蹬伸不充分', tip: '起跳时髋膝要更快伸展。', advice: '蹬地时注意伸髋伸膝，向前上方发力。' },
+    takeoff_weak: { label: '蹬伸不充分', tip: '起跳时膝髋要更快伸展。', advice: '蹬地时注意伸髋伸膝，向前上方发力。' },
     arm_weak: { label: '摆臂不积极', tip: '双臂从后向前上方快速摆起。', advice: '练习大臂后摆到前上摆，带动起跳节奏。' },
     flight_short: { label: '腾空前送不足', tip: '蹬地后继续向前送髋。', advice: '下次蹬地更完整，让身体前移更明显。' },
     landing_stiff: { label: '落地缓冲不足', tip: '落地时主动屈膝缓冲。', advice: '脚跟落地后及时屈膝收髋，减小冲击。' },
     heel_late: { label: '落地脚跟不明显', tip: '脚跟先接触，再过渡到全脚掌。', advice: '多做小跳缓冲练习，体会脚跟先着地。' },
     keypoint_lost: { label: '入镜不完整', tip: '请保持全身完整入镜。', advice: '调整站位，保证双脚和双手都能被看到。' },
-    target_size_drift: { label: '识别目标跑偏', tip: '请保持与镜头的距离稳定，避免背景人物遮挡。', advice: '系统会自动锁定练习者，如果位置和人体大小突然变化，会暂时忽略异常帧。' },
-    double_takeoff_async: { label: '双脚起跳不同步', tip: '注意双脚同时起跳哦。', advice: '先做预摆蹬伸专项，体会两脚一起蹬地发力。' }
+    target_size_drift: { label: '识别目标跑偏', tip: '请保持与镜头距离稳定，避免背景人物遮挡。', advice: '系统会自动锁定练习者，如果位置和人体大小突然变化，会暂时忽略异常帧。' },
+    double_takeoff_async: { label: '双脚起跳不同步', tip: '注意双脚同时起跳。', advice: '先做预摆蹬伸专项，体会两脚一起蹬地发力。' }
 };
 
 export function pointVisible(point, minVisibility = JUMP_CONFIG.minVisibility) {
@@ -294,7 +301,7 @@ export function topReasonEntries(bucket) {
 export function buildTopReasonText(bucket, issueMeta = ISSUE_META) {
     const entries = topReasonEntries(bucket);
     if (entries.length === 0) return '';
-    return entries.map(([code, count]) => `${issueMeta[code].label}${count}次`).join('；');
+    return entries.map(([code, count]) => `${issueMeta[code].label}${count}次`).join('，');
 }
 
 export function pickSuggestion(round, mode, issueMeta = ISSUE_META) {
@@ -318,7 +325,7 @@ export function buildRoundAnalysis(round, mode, issueMeta = ISSUE_META) {
     const improvementText = buildTopReasonText(round?.improvementReasons || {}, issueMeta);
     const suggestion = round ? pickSuggestion(round, mode, issueMeta) : '动作整体较完整，下一轮继续保持。';
 
-    let summaryText = `本轮共练习 ${practiceCount} 次。主要问题：${topReasonsText || '暂未发现明显动作问题'}。训练建议：${suggestion}`;
+    let summaryText = `本轮共练习 ${practiceCount} 次。主要问题：${topReasonsText || '暂无明显动作问题'}。训练建议：${suggestion}`;
     if (practiceCount === 0) {
         summaryText = '本轮尚未开始，暂无有效练习记录。先点击开始分析，再完成至少一次完整动作。';
     } else if (!topReasonsText && improvementText) {

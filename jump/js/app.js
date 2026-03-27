@@ -27,6 +27,10 @@ const CONNECTORS = [
 ];
 const DEFAULT_STUDENTS = { '默认学生': [] };
 const DEFAULT_AUDIO_PREFS = { effects: true, guidance: true, praise: true, volume: 0.8 };
+const GESTURE_STAGE_DISABLED = 'DISABLED';
+const GESTURE_STAGE_WAIT = 'WAIT_GESTURE';
+const GESTURE_STAGE_TRANSITION = 'TRANSITION_TO_SIDE';
+const GESTURE_STAGE_ARMED = 'ARMED_FOR_ATTEMPT';
 
 const STANDARD_JUMP_PROFILE = {
     source: '跳远.mp4',
@@ -95,7 +99,11 @@ const app = {
             smoothFeatures: null,
             confirmFrames: { takeoff: 0, flight: 0, landing: 0 },
             drillPhase: 'IDLE',
-            drillFrames: 0
+            drillFrames: 0,
+            gestureStage: GESTURE_STAGE_WAIT,
+            gestureHoldFrames: 0,
+            transitionStartedAt: 0,
+            gestureSideReadyFrames: 0
         };
 
         const video = document.getElementById('video-layer');
@@ -640,6 +648,10 @@ const app = {
             return modeSelect.value;
         }
 
+        function usesGestureGate() {
+            return currentMode() === 'full';
+        }
+
         function renderDrills() {
             const drills = DRILL_CONTENT[currentMode()] || [];
             drillList.innerHTML = drills.map(item => `
@@ -660,7 +672,7 @@ const app = {
             } else if (currentMode() === 'landing') {
                 updateFeedback('当前为落地缓冲专项', '重点体会脚跟先着地、屈膝缓冲和稳定控制。', 'READY');
             } else {
-                updateFeedback('请侧身站立，保证全身入镜', '系统会按“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作。', 'IDLE');
+                updateFeedback('正对镜头单手上举', '先正对镜头单手直臂上举 0.3 到 0.5 秒，再转侧身开始跳远。', 'IDLE');
             }
         }
 
@@ -675,17 +687,7 @@ const app = {
             return corePointVisible(point, JUMP_CONFIG.minVisibility);
         }
 
-        function extractFeatures(landmarks) {
-            return coreExtractFeatures(landmarks, JUMP_CONFIG);
-        }
-
-        function smoothFeatures(features) {
-            app.smoothFeatures = coreSmoothFeatures(app.smoothFeatures, features, JUMP_CONFIG.emaAlpha);
-            return app.smoothFeatures;
-        }
-
-        function resetRound(keepFeedback) {
-            app.round = createRoundState();
+        function clearMotionTracking() {
             app.phase = 'IDLE';
             app.phaseFrames = 0;
             app.phaseStartedAt = 0;
@@ -706,9 +708,191 @@ const app = {
             app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
             app.drillPhase = 'IDLE';
             app.drillFrames = 0;
+        }
+
+        function resetGestureGate() {
+            app.gestureStage = usesGestureGate() ? GESTURE_STAGE_WAIT : GESTURE_STAGE_DISABLED;
+            app.gestureHoldFrames = 0;
+            app.transitionStartedAt = 0;
+            app.gestureSideReadyFrames = 0;
+        }
+
+        function resetAttemptFlow() {
+            clearMotionTracking();
+            resetGestureGate();
+        }
+
+        function midpoint2D(a, b) {
+            return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+        }
+
+        function getAngle2D(a, b, c) {
+            if (!a || !b || !c) return 180;
+            const abx = a.x - b.x;
+            const aby = a.y - b.y;
+            const cbx = c.x - b.x;
+            const cby = c.y - b.y;
+            const ab = Math.hypot(abx, aby);
+            const cb = Math.hypot(cbx, cby);
+            if (!ab || !cb) return 180;
+            const cosine = Math.min(1, Math.max(-1, (abx * cbx + aby * cby) / (ab * cb)));
+            return Math.acos(cosine) * 180 / Math.PI;
+        }
+
+        function detectRaiseGesture(landmarks) {
+            const leftShoulder = landmarks[11];
+            const rightShoulder = landmarks[12];
+            const leftHip = landmarks[23];
+            const rightHip = landmarks[24];
+            if (![leftShoulder, rightShoulder, leftHip, rightHip].every(pointVisible)) return { detected: false };
+
+            const shoulderMid = midpoint2D(leftShoulder, rightShoulder);
+            const hipMid = midpoint2D(leftHip, rightHip);
+            const torso = Math.max(Math.hypot(shoulderMid.x - hipMid.x, shoulderMid.y - hipMid.y), 0.001);
+            const shoulderWidth = Math.max(Math.abs(leftShoulder.x - rightShoulder.x), 0.001);
+            const frontEnough = shoulderWidth / torso >= JUMP_CONFIG.frontShoulderRatioMin;
+            if (!frontEnough) return { detected: false };
+
+            const checkSide = side => {
+                const shoulder = landmarks[side === 'left' ? 11 : 12];
+                const elbow = landmarks[side === 'left' ? 13 : 14];
+                const wrist = landmarks[side === 'left' ? 15 : 16];
+                if (![shoulder, elbow, wrist].every(pointVisible)) return null;
+                const armLift = (shoulder.y - wrist.y) / torso;
+                const elbowAngle = getAngle2D(shoulder, elbow, wrist);
+                const wristAligned = Math.abs(wrist.x - shoulder.x) <= shoulderWidth * 0.95;
+                const elbowAboveShoulder = elbow.y <= shoulder.y + torso * 0.18;
+                if (
+                    armLift >= JUMP_CONFIG.gestureArmLiftMin &&
+                    elbowAngle >= JUMP_CONFIG.gestureArmStraightMin &&
+                    wristAligned &&
+                    elbowAboveShoulder
+                ) {
+                    return { side, armLift, elbowAngle };
+                }
+                return null;
+            };
+
+            return checkSide('left') || checkSide('right') || { detected: false };
+        }
+
+        function finalizeAttemptCycle(main, sub) {
+            app.attempt = null;
+            app.attemptStartedAt = 0;
+            app.cooldownFrames = 0;
+            app.awaitingReset = false;
+            app.rearmFrames = 0;
+            app.readyFrames = 0;
+            app.targetGraceFrames = 0;
+            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
+            if (usesGestureGate()) {
+                app.baseline = null;
+                app.targetLock = null;
+                app.prevHipX = null;
+                app.prevHipY = null;
+                app.smoothFeatures = null;
+                app.stableFrames = 0;
+                app.lowerBodyLossFrames = 0;
+                app.gestureStage = GESTURE_STAGE_WAIT;
+                app.gestureHoldFrames = 0;
+                app.transitionStartedAt = 0;
+                app.gestureSideReadyFrames = 0;
+                updateFeedback(main, sub, 'IDLE');
+                return;
+            }
+            app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
+            app.awaitingReset = true;
+            app.rearmFrames = 0;
+            setPhase('READY');
+            updateFeedback(main, sub, 'READY');
+        }
+
+        function handleGestureGate(landmarks) {
+            if (!app.training || !usesGestureGate()) return { blocked: false, features: null };
+
+            if (app.gestureStage === GESTURE_STAGE_WAIT) {
+                const gesture = detectRaiseGesture(landmarks);
+                if (gesture.side) {
+                    app.gestureHoldFrames = Math.min(app.gestureHoldFrames + 1, JUMP_CONFIG.gestureHoldFramesMax);
+                    if (app.gestureHoldFrames >= JUMP_CONFIG.gestureHoldFramesMin) {
+                        app.gestureStage = GESTURE_STAGE_TRANSITION;
+                        app.gestureHoldFrames = 0;
+                        app.transitionStartedAt = Date.now();
+                        app.gestureSideReadyFrames = 0;
+                        clearMotionTracking();
+                        updateFeedback('已识别准备手势', '请转为侧身站立，准备开始本次跳远。', 'IDLE');
+                    } else {
+                        updateFeedback('保持举手 0.3 秒', '正对镜头单手直臂上举，系统正在确认开始手势。', 'IDLE');
+                    }
+                } else {
+                    app.gestureHoldFrames = 0;
+                    updateFeedback('正对镜头单手上举', '先正对镜头，单手直臂上举 0.3 到 0.5 秒，再转侧身练习。', 'IDLE');
+                }
+                return { blocked: true, features: null };
+            }
+
+            const features = extractFeatures(landmarks);
+
+            if (app.gestureStage === GESTURE_STAGE_TRANSITION) {
+                if (!features) {
+                    if (Date.now() - app.transitionStartedAt > JUMP_CONFIG.sideTransitionTimeoutMs) {
+                        app.transitionStartedAt = Date.now();
+                    }
+                    updateFeedback('请转为侧身准备', '转侧身后保持全身入镜，先站稳再开始跳远。', 'IDLE');
+                    return { blocked: true, features: null };
+                }
+                const stableFeatures = smoothFeatures(features);
+                updateBaseline(stableFeatures);
+                app.prevHipX = stableFeatures.hipMid.x;
+                app.prevHipY = stableFeatures.hipMid.y;
+                const readyPose = stableFeatures.kneeAngle >= JUMP_CONFIG.readyKneeMin && stableFeatures.hipAngle >= JUMP_CONFIG.readyHipMin;
+                if (readyPose && app.baseline) {
+                    app.gestureSideReadyFrames += 1;
+                    if (app.gestureSideReadyFrames >= JUMP_CONFIG.sideReadyFrames) {
+                        app.gestureStage = GESTURE_STAGE_ARMED;
+                        app.readyFrames = JUMP_CONFIG.readyHoldFrames;
+                        setPhase('READY');
+                        updateFeedback('可以开始本次跳远', '保持侧身，先下蹲预摆，再快速蹬伸起跳。', 'READY');
+                    } else {
+                        updateFeedback('保持侧身准备', '已识别开始手势，请侧身站稳，马上开始。', 'READY');
+                    }
+                } else {
+                    app.gestureSideReadyFrames = 0;
+                    updateFeedback('保持侧身准备', '已识别开始手势，请侧身站稳，马上开始。', 'READY');
+                }
+                return { blocked: true, features: stableFeatures };
+            }
+
+            if (!features) {
+                updateFeedback('请保持侧身入镜', '完成举手后，请侧身站立并保证全身完整入镜。', 'READY');
+                app.prevHipX = null;
+                app.prevHipY = null;
+                app.smoothFeatures = null;
+                return { blocked: true, features: null };
+            }
+
+            return { blocked: false, features };
+        }
+
+        function extractFeatures(landmarks) {
+            return coreExtractFeatures(landmarks, JUMP_CONFIG);
+        }
+
+        function smoothFeatures(features) {
+            app.smoothFeatures = coreSmoothFeatures(app.smoothFeatures, features, JUMP_CONFIG.emaAlpha);
+            return app.smoothFeatures;
+        }
+
+        function resetRound(keepFeedback) {
+            app.round = createRoundState();
+            resetAttemptFlow();
             updateCounters();
             if (!keepFeedback) {
-                updateFeedback('请侧身站立，保证全身入镜', '系统会按“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作。', 'IDLE');
+                if (usesGestureGate()) {
+                    updateFeedback('正对镜头单手上举', '先正对镜头，单手直臂上举 0.3 到 0.5 秒，再转侧身练习。', 'IDLE');
+                } else {
+                    updateFeedback('请侧身站立，保证全身入镜', '系统会按“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作。', 'IDLE');
+                }
                 renderRoundSummary();
             }
         }
@@ -855,7 +1039,7 @@ const app = {
             app.attemptStartedAt = Date.now();
             app.attempt = createAttemptState(app.baseline);
             app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
-            updateFeedback('进入预摆阶段', '继续下蹲预摆，准备快速蹬地起跳。', 'PRELOAD');
+            updateFeedback('开始预摆', '先下蹲预摆，再快速蹬伸起跳。', 'PRELOAD');
         }
 
         function recordFailure(reasonCode) {
@@ -865,16 +1049,7 @@ const app = {
             incrementReason(app.round.failReasons, reasonCode);
             updateCounters();
             playTone('warning');
-            updateFeedback(`本次未完成：${ISSUE_META[reasonCode].label}`, ISSUE_META[reasonCode].tip, 'READY');
-            app.attempt = null;
-            app.attemptStartedAt = 0;
-            app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
-            app.awaitingReset = true;
-            app.rearmFrames = 0;
-            app.readyFrames = 0;
-            app.targetGraceFrames = 0;
-            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
-            setPhase('READY');
+            finalizeAttemptCycle(`本次重点：${ISSUE_META[reasonCode].label}`, `${ISSUE_META[reasonCode].tip} 完成后请重新正对镜头举手开始下一次。`);
         }
 
         function recordSuccess() {
@@ -887,17 +1062,8 @@ const app = {
             if (app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin) incrementReason(app.round.improvementReasons, 'heel_late');
             updateCounters();
             playTone('success');
-            updateFeedback('本次练习完成', '继续保持预摆、蹬地和脚跟着地的完整节奏。', 'READY');
+            finalizeAttemptCycle('本次练习完成', '继续保持预摆、蹬地和脚跟着地的完整节奏。下次请重新正对镜头举手开始。');
             speakPraiseLine();
-            app.attempt = null;
-            app.attemptStartedAt = 0;
-            app.cooldownFrames = JUMP_CONFIG.roundCooldownFrames;
-            app.awaitingReset = true;
-            app.rearmFrames = 0;
-            app.readyFrames = 0;
-            app.targetGraceFrames = 0;
-            app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
-            setPhase('READY');
         }
 
         function updateBaseline(features) {
@@ -949,6 +1115,7 @@ const app = {
                 return;
             }
             if (hasAttemptSignal(features)) beginAttempt();
+            else updateFeedback('先下蹲预摆', '保持侧身，先做明显预摆，再快速蹬伸起跳。', 'READY');
         }
 
         function handlePreload(features) {
@@ -956,12 +1123,19 @@ const app = {
             const depthRatio = (features.hipMid.y - app.attempt.baselineHipY) / Math.max(app.attempt.baselineTorso, 0.001);
             app.attempt.maxDepth = Math.max(app.attempt.maxDepth, depthRatio);
             app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
+            if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth * 0.85) {
+                updateFeedback('预摆再深一点', '膝和髋一起下沉，准备快速蹬伸。', 'PRELOAD');
+            } else if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise * 0.7) {
+                updateFeedback('手臂先向后摆开', '预摆时双臂后摆，再顺势前上摆。', 'PRELOAD');
+            } else {
+                updateFeedback('继续预摆', '保持下蹲节奏，马上转入快速蹬伸。', 'PRELOAD');
+            }
             if (app.phaseFrames < JUMP_CONFIG.preloadMinFrames) return;
             const riseFromDeepest = app.attempt.maxDepth - depthRatio;
             if (features.kneeAngle >= JUMP_CONFIG.takeoffKneeMin && riseFromDeepest >= JUMP_CONFIG.takeoffRise) {
                 app.confirmFrames.takeoff += 1;
                 if (app.confirmFrames.takeoff >= JUMP_CONFIG.takeoffConfirmFrames) {
-                    updateFeedback('进入蹬伸起跳', '继续快速伸髋伸膝，同时摆臂前上。', 'TAKEOFF');
+                    updateFeedback('开始蹬伸起跳', '继续快速伸髋伸膝，同时摆臂前上。', 'TAKEOFF');
                     setPhase('TAKEOFF');
                     return;
                 }
@@ -978,6 +1152,13 @@ const app = {
             app.attempt.maxArmLift = Math.max(app.attempt.maxArmLift, app.attempt.baselineWristY - features.wrist.y);
             app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX) / torsoRef);
             const ankleLift = (app.attempt.baselineAnkleY - features.ankle.y) / torsoRef;
+            if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise * 0.8) {
+                updateFeedback('摆臂再主动一点', '双臂从后向前上方快速摆起。', 'TAKEOFF');
+            } else if (app.attempt.maxRise < JUMP_CONFIG.takeoffRise * 0.8) {
+                updateFeedback('起跳更快一些', '继续伸髋伸膝，把身体快速送起。', 'TAKEOFF');
+            } else {
+                updateFeedback('继续向前上方发力', '保持完整蹬伸，准备进入腾空。', 'TAKEOFF');
+            }
             if (features.dualAnklesVisible) {
                 app.attempt.hasSyncSample = true;
                 app.attempt.maxAnkleAsync = Math.max(app.attempt.maxAnkleAsync, features.ankleAsync);
@@ -986,7 +1167,7 @@ const app = {
             if (app.attempt.maxRise >= JUMP_CONFIG.takeoffRise && (ankleLift > JUMP_CONFIG.takeoffRise || app.attempt.maxForward >= JUMP_CONFIG.minFlightForward)) {
                 app.confirmFrames.flight += 1;
                 if (app.confirmFrames.flight >= JUMP_CONFIG.flightConfirmFrames) {
-                    updateFeedback('进入腾空阶段', '保持身体前移，准备脚跟先着地。', 'FLIGHT');
+                    updateFeedback('进入腾空', '保持身体前移，准备脚跟先着地。', 'FLIGHT');
                     setPhase('FLIGHT');
                     return;
                 }
@@ -1006,6 +1187,11 @@ const app = {
             app.phaseFrames += 1;
             app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX));
             app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            if (app.attempt.maxForward < JUMP_CONFIG.minFlightForward * 0.8) {
+                updateFeedback('继续向前送髋', '腾空时保持身体前移，不要过早收腿。', 'FLIGHT');
+            } else {
+                updateFeedback('准备脚跟先着地', '腾空末段提前准备落地缓冲。', 'FLIGHT');
+            }
             if (features.kneeAngle <= JUMP_CONFIG.landingKneeMax || features.heelLead >= JUMP_CONFIG.heelLeadMin) {
                 app.confirmFrames.landing += 1;
                 if (app.confirmFrames.landing >= JUMP_CONFIG.landingConfirmFrames) {
@@ -1024,6 +1210,11 @@ const app = {
             app.phaseFrames += 1;
             app.attempt.landingKneeAngle = Math.min(app.attempt.landingKneeAngle, features.kneeAngle);
             app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            if (features.heelLead < JUMP_CONFIG.heelLeadMin) {
+                updateFeedback('脚跟先着地', '先让脚跟接触，再过渡到全脚掌。', 'LANDING');
+            } else {
+                updateFeedback('主动屈膝缓冲', '落地后继续屈膝收髋，保持身体稳定。', 'LANDING');
+            }
             if (features.kneeAngle <= JUMP_CONFIG.landingKneeMax && app.phaseFrames >= 2) {
                 app.confirmFrames.landing += 1;
                 if (app.confirmFrames.landing >= JUMP_CONFIG.landingConfirmFrames) {
@@ -1169,7 +1360,9 @@ const app = {
         }
 
         function analyzeMotion(landmarks) {
-            const features = extractFeatures(landmarks);
+            const gateResult = handleGestureGate(landmarks);
+            if (gateResult.blocked) return;
+            const features = gateResult.features || extractFeatures(landmarks);
             if (!features) {
                 if (app.training) {
                     app.lowerBodyLossFrames += 1;
@@ -1281,8 +1474,13 @@ const app = {
             if (app.training) {
                 resetRound(false);
                 playTone('start');
-                updateFeedback('请先站稳准备', '侧身站立，保持 1 秒稳定后再进入预摆。', 'IDLE');
-                speakText('开始练习，请先站稳准备。', { kind: 'guidance', force: true });
+                if (usesGestureGate()) {
+                    updateFeedback('正对镜头单手上举', '先正对镜头单手直臂上举 0.3 到 0.5 秒，再转侧身练习。', 'IDLE');
+                    speakText('开始练习，请先正对镜头单手上举，再转侧身练习。', { kind: 'guidance', force: true });
+                } else {
+                    updateFeedback('请先站稳准备', '侧身站立，保持 1 秒稳定后再进入预摆。', 'IDLE');
+                    speakText('开始练习，请先站稳准备。', { kind: 'guidance', force: true });
+                }
             } else {
                 finishRound(false);
             }
