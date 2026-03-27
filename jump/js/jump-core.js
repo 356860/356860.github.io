@@ -41,6 +41,8 @@ export const JUMP_CONFIG = {
     targetTorsoMaxRatio: 1.38,
     targetGraceFrames: 4,
     maxLowerBodyLossFrames: 3,
+    featureGapSilentFrames: 6,
+    featureEvidenceMinFrames: 10,
     doubleTakeoffSyncRatio: 0.025,
     gestureHoldFramesMin: 9,
     gestureHoldFramesMax: 18,

@@ -882,10 +882,43 @@ const app = {
             }
         }
 
-        function shouldCountFailure(reasonCode) {
+        function attemptHasActionEvidence() {
             if (!app.attempt) return false;
             if (app.attempt.committed) return true;
+            return (
+                Number(app.attempt.sampleFrame || 0) >= JUMP_CONFIG.featureEvidenceMinFrames ||
+                Number(app.attempt.maxDepth || 0) >= JUMP_CONFIG.minPreloadDepth * 0.8 ||
+                Number(app.attempt.maxRise || 0) >= JUMP_CONFIG.takeoffRise * 0.75 ||
+                Number(app.attempt.maxForward || 0) >= JUMP_CONFIG.minFlightForward * 0.75 ||
+                Number(app.attempt.maxArmLift || 0) >= JUMP_CONFIG.minArmSwingRise * 0.75
+            );
+        }
+
+        function appendAttemptImprovements() {
+            if (!app.round || !app.attempt) return;
+            if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth + 0.01) incrementReason(app.round.improvementReasons, 'preload_weak');
+            if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise + 0.02) incrementReason(app.round.improvementReasons, 'arm_weak');
+            if (app.attempt.maxRise < JUMP_CONFIG.takeoffRise + 0.002) incrementReason(app.round.improvementReasons, 'takeoff_weak');
+            if (app.attempt.landingKneeAngle > 132) incrementReason(app.round.improvementReasons, 'landing_stiff');
+            if (app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin) incrementReason(app.round.improvementReasons, 'heel_late');
+        }
+
+        function finalizeAttemptFromEvidence() {
+            if (!app.round || !app.attempt) return;
+            markAttemptCommitted();
+            app.round.practiceCount += 1;
+            app.round.successCount += 1;
+            appendAttemptImprovements();
+            enrichAttemptDiagnostics();
+            updateCounters();
+            playTone('finish');
+            finalizeAttemptCycle('本次动作已完成分析', '中途短暂超出镜头，系统已根据已采集动作数据给出指导。下次请重新正对镜头举手开始。');
+        }
+
+        function shouldCountFailure(reasonCode) {
+            if (!app.attempt) return false;
             if (reasonCode === 'keypoint_lost' || reasonCode === 'target_size_drift' || reasonCode === 'not_ready' || reasonCode === 'preload_weak') return false;
+            if (app.attempt.committed) return true;
             return app.phase === 'TAKEOFF' || app.phase === 'FLIGHT' || app.phase === 'LANDING';
         }
 
@@ -1148,11 +1181,7 @@ const app = {
             markAttemptCommitted();
             app.round.practiceCount += 1;
             app.round.successCount += 1;
-            if (app.attempt.maxDepth < JUMP_CONFIG.minPreloadDepth + 0.01) incrementReason(app.round.improvementReasons, 'preload_weak');
-            if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise + 0.02) incrementReason(app.round.improvementReasons, 'arm_weak');
-            if (app.attempt.maxRise < JUMP_CONFIG.takeoffRise + 0.002) incrementReason(app.round.improvementReasons, 'takeoff_weak');
-            if (app.attempt.landingKneeAngle > 132) incrementReason(app.round.improvementReasons, 'landing_stiff');
-            if (app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin) incrementReason(app.round.improvementReasons, 'heel_late');
+            appendAttemptImprovements();
             enrichAttemptDiagnostics();
             updateCounters();
             playTone('success');
@@ -1470,10 +1499,22 @@ const app = {
             if (!features) {
                 if (app.training) {
                     app.lowerBodyLossFrames += 1;
+                    if (app.attempt && attemptHasActionEvidence()) {
+                        if (app.lowerBodyLossFrames <= JUMP_CONFIG.featureGapSilentFrames) {
+                            updateFeedback('继续完成动作', '短时未看到完整下肢，系统将保留已采集动作数据继续分析。', app.phase === 'IDLE' ? 'READY' : app.phase);
+                            return;
+                        }
+                        if (app.lowerBodyLossFrames > JUMP_CONFIG.maxLowerBodyLossFrames) {
+                            finalizeAttemptFromEvidence();
+                            return;
+                        }
+                    }
                     if (app.lowerBodyLossFrames > JUMP_CONFIG.maxLowerBodyLossFrames && app.attempt) {
                         recordFailure('keypoint_lost');
                     } else {
-                        updateFeedback('请退后站位，让双脚入镜', '跳远指导需要看到双脚、膝和髋，请完整进入镜头后再练习。', app.phase === 'IDLE' ? 'IDLE' : 'READY');
+                        if (app.lowerBodyLossFrames > JUMP_CONFIG.featureGapSilentFrames || !app.attempt) {
+                            updateFeedback('请退后站位，让双脚入镜', '跳远指导需要看到双脚、膝和髋，请完整进入镜头后再练习。', app.phase === 'IDLE' ? 'IDLE' : 'READY');
+                        }
                     }
                 }
                 app.prevHipX = null;
