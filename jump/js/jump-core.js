@@ -5,6 +5,11 @@ export const SIDE_REQUIRED_POINTS = {
     right: [12, 16, 24, 26, 28, 30, 32]
 };
 
+export const SIDE_CORE_POINTS = {
+    left: [11, 15, 23, 25, 27],
+    right: [12, 16, 24, 26, 28]
+};
+
 export const NON_ACTION_REASON_CODES = ['not_ready', 'keypoint_lost', 'target_size_drift'];
 
 export const JUMP_CONFIG = {
@@ -89,6 +94,10 @@ export function sideRequiredVisible(landmarks, side, minVisibility = JUMP_CONFIG
     return SIDE_REQUIRED_POINTS[side].every(index => pointVisible(landmarks[index], minVisibility));
 }
 
+export function sideCoreVisible(landmarks, side, minVisibility = JUMP_CONFIG.minVisibility) {
+    return SIDE_CORE_POINTS[side].every(index => pointVisible(landmarks[index], minVisibility));
+}
+
 export function coreTracked(landmarks) {
     return [11, 12, 23, 24].every(index => pointTracked(landmarks[index]));
 }
@@ -169,9 +178,9 @@ export function getVisibleSide(landmarks) {
 
 export function resolveTrackedSide(landmarks, minVisibility = JUMP_CONFIG.minVisibility) {
     const preferredSide = getVisibleSide(landmarks);
-    if (coreTracked(landmarks) && sideRequiredVisible(landmarks, preferredSide, minVisibility)) return preferredSide;
+    if (coreTracked(landmarks) && sideCoreVisible(landmarks, preferredSide, minVisibility)) return preferredSide;
     const fallbackSide = preferredSide === 'left' ? 'right' : 'left';
-    if (coreTracked(landmarks) && sideRequiredVisible(landmarks, fallbackSide, minVisibility)) return fallbackSide;
+    if (coreTracked(landmarks) && sideCoreVisible(landmarks, fallbackSide, minVisibility)) return fallbackSide;
     return null;
 }
 
@@ -202,6 +211,7 @@ export function extractFeatures(landmarks, config = JUMP_CONFIG) {
     const leftAnkle = landmarks[27];
     const rightAnkle = landmarks[28];
     const dualAnklesVisible = pointVisible(leftAnkle, config.minVisibility) && pointVisible(rightAnkle, config.minVisibility);
+    const heelLeadAvailable = pointVisible(heel, config.minVisibility * 0.75) && pointVisible(footIndex, config.minVisibility * 0.75);
     const leftLift = dualAnklesVisible ? hipMid.y - leftAnkle.y : 0;
     const rightLift = dualAnklesVisible ? hipMid.y - rightAnkle.y : 0;
     const referenceShoulder = pointTracked(otherShoulder) ? otherShoulder : shoulder;
@@ -221,10 +231,11 @@ export function extractFeatures(landmarks, config = JUMP_CONFIG) {
         hipAngle: getAngle(shoulder, hip, knee),
         armLift: (shoulder.y - wrist.y) / torso,
         wristBack: Math.abs(wrist.x - referenceShoulder.x) / shoulderWidth,
-        heelLead: (heel.y - footIndex.y) / torso,
+        heelLead: heelLeadAvailable ? (heel.y - footIndex.y) / torso : null,
+        heelLeadAvailable,
         ankleAsync: dualAnklesVisible ? Math.abs(leftLift - rightLift) / torso : 0,
         ankleForwardAsync: dualAnklesVisible ? Math.abs(leftAnkle.x - rightAnkle.x) / torso : 0,
-        lowerBodyVisible: sideRequiredVisible(landmarks, side, config.minVisibility),
+        lowerBodyVisible: sideCoreVisible(landmarks, side, config.minVisibility),
         dualAnklesVisible
     };
 }
@@ -299,6 +310,7 @@ export function createAttemptState(baseline) {
         maxForward: 0,
         landingKneeAngle: 180,
         maxHeelLead: -1,
+        hasHeelLeadSample: false,
         maxAnkleAsync: 0,
         maxAnkleForwardAsync: 0,
         maxFlightHipAngle: 0,

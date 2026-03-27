@@ -900,7 +900,7 @@ const app = {
             if (app.attempt.maxArmLift < JUMP_CONFIG.minArmSwingRise + 0.02) incrementReason(app.round.improvementReasons, 'arm_weak');
             if (app.attempt.maxRise < JUMP_CONFIG.takeoffRise + 0.002) incrementReason(app.round.improvementReasons, 'takeoff_weak');
             if (app.attempt.landingKneeAngle > 132) incrementReason(app.round.improvementReasons, 'landing_stiff');
-            if (app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin) incrementReason(app.round.improvementReasons, 'heel_late');
+            if (app.attempt.hasHeelLeadSample && app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin) incrementReason(app.round.improvementReasons, 'heel_late');
         }
 
         function finalizeAttemptFromEvidence() {
@@ -1316,14 +1316,17 @@ const app = {
             tickAttemptSample();
             markAttemptCommitted();
             app.attempt.maxForward = Math.max(app.attempt.maxForward, Math.abs(features.hipMid.x - app.attempt.baselineHipX));
-            app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            if (features.heelLeadAvailable) {
+                app.attempt.hasHeelLeadSample = true;
+                app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            }
             app.attempt.maxFlightHipAngle = Math.max(app.attempt.maxFlightHipAngle || 0, features.hipAngle || 0);
             if (app.attempt.maxForward < JUMP_CONFIG.minFlightForward * 0.8) {
                 updateFeedback('继续向前送髋', '腾空时保持身体前移，不要过早收腿。', 'FLIGHT');
             } else {
                 updateFeedback('准备脚跟先着地', '腾空末段提前准备落地缓冲。', 'FLIGHT');
             }
-            if (features.kneeAngle <= JUMP_CONFIG.landingKneeMax || features.heelLead >= JUMP_CONFIG.heelLeadMin) {
+            if (features.kneeAngle <= JUMP_CONFIG.landingKneeMax || (features.heelLeadAvailable && features.heelLead >= JUMP_CONFIG.heelLeadMin)) {
                 app.confirmFrames.landing += 1;
                 if (app.confirmFrames.landing >= JUMP_CONFIG.landingConfirmFrames) {
                     app.attempt.landingKneeAngle = features.kneeAngle;
@@ -1342,8 +1345,11 @@ const app = {
             tickAttemptSample();
             markAttemptCommitted();
             app.attempt.landingKneeAngle = Math.min(app.attempt.landingKneeAngle, features.kneeAngle);
-            app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
-            if (features.heelLead < JUMP_CONFIG.heelLeadMin) {
+            if (features.heelLeadAvailable) {
+                app.attempt.hasHeelLeadSample = true;
+                app.attempt.maxHeelLead = Math.max(app.attempt.maxHeelLead, features.heelLead);
+            }
+            if (features.heelLeadAvailable && features.heelLead < JUMP_CONFIG.heelLeadMin) {
                 updateFeedback('脚跟先着地', '先让脚跟接触，再过渡到全脚掌。', 'LANDING');
             } else {
                 updateFeedback('主动屈膝缓冲', '落地后继续屈膝收髋，保持身体稳定。', 'LANDING');
@@ -1358,7 +1364,7 @@ const app = {
                 app.confirmFrames.landing = 0;
             }
             if (getPhaseElapsedMs() > JUMP_CONFIG.landingTimeoutMs) {
-                recordFailure(app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin ? 'heel_late' : 'landing_stiff');
+                recordFailure(app.attempt.hasHeelLeadSample && app.attempt.maxHeelLead < JUMP_CONFIG.heelLeadMin ? 'heel_late' : 'landing_stiff');
             }
         }
 
@@ -1462,14 +1468,14 @@ const app = {
                 if (features.kneeAngle > 155) {
                     updateFeedback('落地缓冲专项', '做一次小跳或快速下落，脚跟先着地，随后主动屈膝缓冲。', 'READY');
                 }
-                if (features.kneeAngle < 138 || features.heelLead >= JUMP_CONFIG.heelLeadMin) {
+                if (features.kneeAngle < 138 || (features.heelLeadAvailable && features.heelLead >= JUMP_CONFIG.heelLeadMin)) {
                     app.drillPhase = 'LANDING';
                     app.drillFrames = 0;
                 }
                 return;
             }
             app.drillFrames += 1;
-            if (features.kneeAngle <= 120 && features.heelLead >= JUMP_CONFIG.heelLeadMin) {
+            if (features.kneeAngle <= 120 && features.heelLeadAvailable && features.heelLead >= JUMP_CONFIG.heelLeadMin) {
                 app.round.practiceCount += 1;
                 app.round.successCount += 1;
                 updateCounters();
@@ -1483,10 +1489,10 @@ const app = {
             if (app.drillFrames > 12) {
                 app.round.practiceCount += 1;
                 app.round.failedCount += 1;
-                incrementReason(app.round.failReasons, features.heelLead < JUMP_CONFIG.heelLeadMin ? 'heel_late' : 'landing_stiff');
+                incrementReason(app.round.failReasons, features.heelLeadAvailable && features.heelLead < JUMP_CONFIG.heelLeadMin ? 'heel_late' : 'landing_stiff');
                 updateCounters();
                 playTone('warning');
-                updateFeedback('本次落地缓冲未完成', features.heelLead < JUMP_CONFIG.heelLeadMin ? ISSUE_META.heel_late.tip : ISSUE_META.landing_stiff.tip, 'READY');
+                updateFeedback('本次落地缓冲未完成', features.heelLeadAvailable && features.heelLead < JUMP_CONFIG.heelLeadMin ? ISSUE_META.heel_late.tip : ISSUE_META.landing_stiff.tip, 'READY');
                 app.drillPhase = 'IDLE';
                 app.cooldownFrames = 12;
             }
@@ -1512,7 +1518,7 @@ const app = {
                     if (app.lowerBodyLossFrames > JUMP_CONFIG.maxLowerBodyLossFrames && app.attempt) {
                         recordFailure('keypoint_lost');
                     } else {
-                        if (app.lowerBodyLossFrames > JUMP_CONFIG.featureGapSilentFrames || !app.attempt) {
+                        if (app.lowerBodyLossFrames > JUMP_CONFIG.featureGapSilentFrames) {
                             updateFeedback('请退后站位，让双脚入镜', '跳远指导需要看到双脚、膝和髋，请完整进入镜头后再练习。', app.phase === 'IDLE' ? 'IDLE' : 'READY');
                         }
                     }
