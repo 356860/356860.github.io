@@ -343,7 +343,12 @@
             display: inline-flex;
             align-items: flex-end;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
+        }
+
+        .sound-dock > button {
+            min-width: 96px;
+            text-align: center;
         }
 
         .stage-counter {
@@ -352,9 +357,9 @@
             right: 12px;
             z-index: 12;
             display: none;
-            min-width: 112px;
-            padding: 12px 14px;
-            border-radius: 20px;
+            min-width: 102px;
+            padding: 10px 12px;
+            border-radius: 18px;
             border: 1px solid rgba(216, 226, 240, 0.95);
             background: rgba(255, 255, 255, 0.16);
             color: #fff;
@@ -366,12 +371,12 @@
             font-size: 12px;
             font-weight: 600;
             color: rgba(255, 255, 255, 0.78);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .stage-counter-value {
             display: block;
-            font-size: 40px;
+            font-size: 34px;
             line-height: 1;
             font-weight: 800;
             letter-spacing: -1px;
@@ -380,31 +385,31 @@
         .stage-feedback {
             position: absolute;
             left: 50%;
-            bottom: 78px;
+            bottom: 72px;
             z-index: 11;
             display: none;
-            width: min(560px, calc(100% - 48px));
-            padding: 18px 22px;
-            border-radius: 22px;
+            width: min(500px, calc(100% - 52px));
+            padding: 14px 18px;
+            border-radius: 18px;
             border: 1px solid rgba(216, 226, 240, 0.9);
-            background: rgba(9, 18, 34, 0.54);
+            background: rgba(9, 18, 34, 0.48);
             color: #fff;
             backdrop-filter: blur(14px);
             transform: translateX(-50%);
-            box-shadow: 0 16px 36px rgba(5, 10, 20, 0.22);
+            box-shadow: 0 12px 28px rgba(5, 10, 20, 0.18);
         }
 
         .stage-feedback-title {
-            font-size: 30px;
+            font-size: 24px;
             line-height: 1.15;
             font-weight: 800;
             letter-spacing: -0.8px;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
         }
 
         .stage-feedback-sub {
-            font-size: 14px;
-            line-height: 1.6;
+            font-size: 13px;
+            line-height: 1.5;
             color: rgba(255, 255, 255, 0.76);
         }
 
@@ -521,7 +526,7 @@
 
         .app.is-fullscreen .bottom-bar,
         .app:fullscreen .bottom-bar {
-            bottom: 18px;
+            bottom: 16px;
         }
 
         .app.is-fullscreen .student-dock,
@@ -773,12 +778,12 @@
             .stage { min-height: 54vh; }
             .meta-grid { grid-template-columns: 1fr; }
             .stage-feedback {
-                width: min(92vw, 520px);
-                bottom: 84px;
-                padding: 16px 18px;
+                width: min(92vw, 480px);
+                bottom: 82px;
+                padding: 14px 16px;
             }
             .stage-feedback-title {
-                font-size: 24px;
+                font-size: 20px;
             }
         }
     </style>
