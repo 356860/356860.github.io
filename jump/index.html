@@ -172,6 +172,29 @@
             border-color: rgba(255, 224, 224, 0.84);
         }
 
+        .stage-utility-toggle {
+            border: 1px solid rgba(216, 226, 240, 0.95);
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            border-radius: 999px;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            box-shadow: none;
+            transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .stage-utility-toggle:hover {
+            transform: translateY(-1px);
+        }
+
+        .stage-utility-toggle.is-active {
+            background: rgba(255, 255, 255, 0.22);
+            border-color: rgba(255, 255, 255, 0.42);
+        }
+
         .student-panel {
             position: absolute;
             top: calc(100% + 10px);
@@ -323,6 +346,68 @@
             gap: 10px;
         }
 
+        .stage-counter {
+            position: absolute;
+            top: 68px;
+            right: 12px;
+            z-index: 12;
+            display: none;
+            min-width: 112px;
+            padding: 12px 14px;
+            border-radius: 20px;
+            border: 1px solid rgba(216, 226, 240, 0.95);
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            backdrop-filter: blur(10px);
+        }
+
+        .stage-counter-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.78);
+            margin-bottom: 8px;
+        }
+
+        .stage-counter-value {
+            display: block;
+            font-size: 40px;
+            line-height: 1;
+            font-weight: 800;
+            letter-spacing: -1px;
+        }
+
+        .stage-feedback {
+            position: absolute;
+            left: 50%;
+            bottom: 78px;
+            z-index: 11;
+            display: none;
+            width: min(560px, calc(100% - 48px));
+            padding: 18px 22px;
+            border-radius: 22px;
+            border: 1px solid rgba(216, 226, 240, 0.9);
+            background: rgba(9, 18, 34, 0.54);
+            color: #fff;
+            backdrop-filter: blur(14px);
+            transform: translateX(-50%);
+            box-shadow: 0 16px 36px rgba(5, 10, 20, 0.22);
+        }
+
+        .stage-feedback-title {
+            font-size: 30px;
+            line-height: 1.15;
+            font-weight: 800;
+            letter-spacing: -0.8px;
+            margin-bottom: 8px;
+        }
+
+        .stage-feedback-sub {
+            font-size: 14px;
+            line-height: 1.6;
+            color: rgba(255, 255, 255, 0.76);
+        }
+
         .sound-toggle {
             border: 1px solid rgba(216, 226, 240, 0.95);
             background: rgba(255, 255, 255, 0.16);
@@ -405,6 +490,55 @@
             min-height: 0;
             overflow-y: auto;
             padding-right: 4px;
+        }
+
+        .app.is-fullscreen,
+        .app:fullscreen {
+            grid-template-columns: 1fr;
+            gap: 0;
+            padding: 0;
+            background: #081120;
+        }
+
+        .app.is-fullscreen .stage,
+        .app:fullscreen .stage {
+            border-radius: 0;
+            border: none;
+            min-height: 100vh;
+        }
+
+        .app.is-fullscreen .sidebar,
+        .app:fullscreen .sidebar {
+            display: none;
+        }
+
+        .app.is-fullscreen .stage-counter,
+        .app:fullscreen .stage-counter,
+        .app.is-fullscreen .stage-feedback,
+        .app:fullscreen .stage-feedback {
+            display: block;
+        }
+
+        .app.is-fullscreen .bottom-bar,
+        .app:fullscreen .bottom-bar {
+            bottom: 18px;
+        }
+
+        .app.is-fullscreen .student-dock,
+        .app:fullscreen .student-dock {
+            top: 16px;
+            left: 16px;
+        }
+
+        .app.is-fullscreen .sound-dock,
+        .app:fullscreen .sound-dock {
+            top: 16px;
+            right: 16px;
+        }
+
+        .app.is-fullscreen .top-bar,
+        .app:fullscreen .top-bar {
+            top: 16px;
         }
 
         .panel { padding: 16px; }
@@ -638,6 +772,14 @@
             .app { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
             .stage { min-height: 54vh; }
             .meta-grid { grid-template-columns: 1fr; }
+            .stage-feedback {
+                width: min(92vw, 520px);
+                bottom: 84px;
+                padding: 16px 18px;
+            }
+            .stage-feedback-title {
+                font-size: 24px;
+            }
         }
     </style>
 </head>
@@ -666,6 +808,7 @@
             </div>
 
             <div class="sound-dock">
+                <button id="fullscreen-btn" class="stage-utility-toggle" onclick="toggleFullscreenMode()">全屏</button>
                 <button id="sound-toggle" class="sound-toggle" onclick="toggleSoundPanel()">声音提示</button>
                 <div id="sound-panel" class="panel sound-panel">
                     <div class="sound-row">
@@ -685,6 +828,16 @@
                         <input id="audio-volume-range" type="range" min="0" max="100" step="5" onchange="updateAudioPrefs()">
                     </div>
                 </div>
+            </div>
+
+            <div class="stage-counter">
+                <span class="stage-counter-label">练习次数</span>
+                <span class="stage-counter-value" id="stage-practice-count">0</span>
+            </div>
+
+            <div class="stage-feedback">
+                <div class="stage-feedback-title" id="stage-feedback-main">请侧身站立，保证全身入镜</div>
+                <div class="stage-feedback-sub" id="stage-feedback-sub">建议从侧面拍摄，双脚和双手都要完整入镜，先站稳再开始动作。</div>
             </div>
 
             <div class="bottom-bar">

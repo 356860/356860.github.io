@@ -134,11 +134,15 @@ const app = {
         const phaseBadge = document.getElementById('phase-badge');
         const feedbackMain = document.getElementById('feedback-main');
         const feedbackSub = document.getElementById('feedback-sub');
+        const stageFeedbackMain = document.getElementById('stage-feedback-main');
+        const stageFeedbackSub = document.getElementById('stage-feedback-sub');
         const practiceCountEl = document.getElementById('practice-count');
+        const stagePracticeCountEl = document.getElementById('stage-practice-count');
         const roundSummary = document.getElementById('round-summary');
         const historyList = document.getElementById('history-list');
         const studentListContainer = document.getElementById('student-list-container');
         const startBtn = document.getElementById('start-btn');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
         const modeSelect = document.getElementById('mode-select');
         const drillList = document.getElementById('drill-list');
         const classNameInput = document.getElementById('class-name-input');
@@ -157,6 +161,7 @@ const app = {
         const audioVolumeRange = document.getElementById('audio-volume-range');
         const titleChip = document.querySelector('.title-chip');
         const studentDock = document.querySelector('.student-dock');
+        const appShell = document.querySelector('.app');
         const audioState = {
             prefs: { ...DEFAULT_AUDIO_PREFS },
             ctx: null,
@@ -1117,13 +1122,47 @@ const app = {
         }
 
         function updateCounters() {
-            practiceCountEl.textContent = app.round ? app.round.practiceCount : 0;
+            const count = app.round ? app.round.practiceCount : 0;
+            practiceCountEl.textContent = count;
+            if (stagePracticeCountEl) stagePracticeCountEl.textContent = count;
         }
 
         function updateTrainingButton() {
             if (!startBtn) return;
             startBtn.textContent = app.training ? '结束' : '开始';
             startBtn.className = `stage-action-toggle${app.training ? ' is-active' : ''}`;
+        }
+
+        function syncFullscreenUi(active) {
+            if (appShell) appShell.classList.toggle('is-fullscreen', active);
+            document.body.classList.toggle('is-fullscreen', active);
+            if (fullscreenBtn) {
+                fullscreenBtn.textContent = active ? '退出全屏' : '全屏';
+                fullscreenBtn.className = `stage-utility-toggle${active ? ' is-active' : ''}`;
+            }
+        }
+
+        async function toggleFullscreenMode() {
+            if (!appShell) return;
+            const active = appShell.classList.contains('is-fullscreen');
+            if (active) {
+                appShell.dataset.nativeFullscreen = '';
+                if (document.fullscreenElement === appShell && document.exitFullscreen) {
+                    try { await document.exitFullscreen(); } catch (error) { console.warn('Failed to exit fullscreen', error); }
+                }
+                syncFullscreenUi(false);
+                return;
+            }
+            syncFullscreenUi(true);
+            if (appShell.requestFullscreen) {
+                try {
+                    appShell.dataset.nativeFullscreen = '1';
+                    await appShell.requestFullscreen();
+                } catch (error) {
+                    appShell.dataset.nativeFullscreen = '';
+                    console.warn('Failed to enter fullscreen, fallback to stage view mode', error);
+                }
+            }
         }
 
         function refreshBaseline(features) {
@@ -1160,6 +1199,8 @@ const app = {
         function updateFeedback(main, sub, phase) {
             feedbackMain.textContent = main;
             feedbackSub.textContent = sub;
+            if (stageFeedbackMain) stageFeedbackMain.textContent = main;
+            if (stageFeedbackSub) stageFeedbackSub.textContent = sub;
             if (phase) setPhase(phase);
             maybeSpeakFeedback(main, phase);
         }
@@ -1919,6 +1960,7 @@ const app = {
         window.toggleStudentPanel = toggleStudentPanel;
         window.submitStudentName = submitStudentName;
         window.toggleSoundPanel = toggleSoundPanel;
+        window.toggleFullscreenMode = toggleFullscreenMode;
         window.updateAudioPrefs = updateAudioPrefs;
         window.toggleTraining = toggleTraining;
         window.finishRound = finishRound;
@@ -1927,6 +1969,19 @@ const app = {
         window.updateSessionMeta = updateSessionMeta;
 
         window.addEventListener('online', flushSyncQueue);
+        document.addEventListener('fullscreenchange', () => {
+            if (!appShell) return;
+            const active = document.fullscreenElement === appShell;
+            if (active) {
+                appShell.dataset.nativeFullscreen = '1';
+                syncFullscreenUi(true);
+                return;
+            }
+            if (appShell.dataset.nativeFullscreen === '1') {
+                appShell.dataset.nativeFullscreen = '';
+                syncFullscreenUi(false);
+            }
+        });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') flushSyncQueue();
         });
