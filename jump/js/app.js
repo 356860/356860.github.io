@@ -1519,6 +1519,8 @@ const app = {
             const squatTooDeep = metrics.minKneeAngle < JUMP_CONFIG.preloadDrillTargetKneeMin;
             const hipFoldWeak = metrics.minHipAngle > JUMP_CONFIG.preloadDrillTargetHipMax;
             const armBackWeak = metrics.maxWristBack < JUMP_CONFIG.preloadDrillArmBackMin;
+            const usableSquat = metrics.minKneeAngle <= JUMP_CONFIG.preloadDrillUsableKneeMax && metrics.minHipAngle <= JUMP_CONFIG.preloadDrillUsableHipMax;
+            const usableArmBack = metrics.maxWristBack >= JUMP_CONFIG.preloadDrillUsableArmBackMin;
             const squatClearlyShallow = metrics.minKneeAngle > JUMP_CONFIG.preloadDrillTargetKneeMax + 8;
             const hipFoldClearlyWeak = metrics.minHipAngle > JUMP_CONFIG.preloadDrillTargetHipMax + 8;
             const armBackClearlyWeak = metrics.maxWristBack < JUMP_CONFIG.preloadDrillArmBackMin * 0.82;
@@ -1526,6 +1528,8 @@ const app = {
             const hipOpenDelta = features.hipAngle - metrics.minHipAngle;
             const extensionReady = kneeOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin && hipOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin * 0.75;
             const extensionComplete =
+                usableSquat &&
+                usableArmBack &&
                 extensionReady &&
                 features.kneeAngle >= JUMP_CONFIG.preloadDrillExtendKneeMin &&
                 features.hipAngle >= JUMP_CONFIG.preloadDrillExtendHipMin &&
@@ -1563,14 +1567,14 @@ const app = {
             if (app.drillFrames > JUMP_CONFIG.preloadDrillTimeoutFrames) {
                 app.round.practiceCount += 1;
                 app.round.failedCount += 1;
-                if (squatTooShallow || hipFoldWeak) incrementReason(app.round.failReasons, 'preload_weak');
+                if (!usableSquat) incrementReason(app.round.failReasons, 'preload_weak');
                 else incrementReason(app.round.failReasons, 'takeoff_weak');
-                if (armBackWeak) incrementReason(app.round.improvementReasons, 'arm_weak');
+                if (!usableArmBack) incrementReason(app.round.improvementReasons, 'arm_weak');
                 updateCounters();
                 playTone('warning');
                 updateFeedback(
-                    squatTooShallow || hipFoldWeak ? '本次下蹲不足' : '本次原地蹬摆未充分',
-                    squatTooShallow || hipFoldWeak ? ISSUE_META.preload_weak.tip : ISSUE_META.takeoff_weak.tip,
+                    !usableSquat ? '本次下蹲不足' : '本次原地蹬摆未充分',
+                    !usableSquat ? ISSUE_META.preload_weak.tip : ISSUE_META.takeoff_weak.tip,
                     'READY'
                 );
                 app.drillPhase = 'IDLE';
