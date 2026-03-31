@@ -11,8 +11,8 @@
     pickSuggestion as corePickSuggestion,
     buildRoundAnalysis as coreBuildRoundAnalysis,
     pointVisible as corePointVisible
-} from './jump-core.js';
-import { createAppStorage } from './jump-storage.js';
+} from './jump-core.js?v=20250327b';
+import { createAppStorage } from './jump-storage.js?v=20250327b';
 
 const STORAGE_KEY = 'jump-gemini-phase-studio-v1';
 const AUDIO_PREFS_KEY = 'jump-gemini-audio-prefs-v1';

@@ -1,11 +1,11 @@
-const CACHE_NAME = 'jump-pwa-v2';
+const CACHE_NAME = 'jump-pwa-v3';
 const APP_SHELL = [
     './',
     './index.html',
     './manifest.webmanifest',
-    './js/app.js',
-    './js/jump-core.js',
-    './js/jump-storage.js',
+    './js/app.js?v=20250327b',
+    './js/jump-core.js?v=20250327b',
+    './js/jump-storage.js?v=20250327b',
     './mediapipe/pose/pose.js',
     './mediapipe/pose/pose_solution_packed_assets_loader.js',
     './mediapipe/pose/pose_solution_packed_assets.data',
