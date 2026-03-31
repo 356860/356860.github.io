@@ -78,6 +78,11 @@ export const JUMP_CONFIG = {
     flightHipExtensionMin: 156
 };
 
+Object.assign(JUMP_CONFIG, {
+    preloadDrillSyncToleranceFrames: 6,
+    preloadDrillArmPeakLateFrames: 8
+});
+
 export const ISSUE_META = {
     not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站姿 1 秒，再做完整预摆和起跳。' },
     preload_weak: { label: '下蹲不足', tip: '再下蹲一点，膝和髋要一起下沉到位。', advice: '下一轮先做原地后摆下蹲练习，膝角控制到 90 到 120 度，再快速蹬摆。' },
@@ -95,6 +100,24 @@ export const ISSUE_META = {
     target_size_drift: { label: '识别目标跑偏', tip: '请保持与镜头距离稳定，避免背景人物遮挡。', advice: '系统会自动锁定练习者，如果位置和人体大小突然变化，会暂时忽略异常帧。' },
     double_takeoff_async: { label: '双脚起跳不同步', tip: '注意双脚同时起跳。', advice: '先做预摆蹬伸专项，体会两脚一起蹬地发力。' }
 };
+
+Object.assign(ISSUE_META, {
+    hip_fold_weak: {
+        label: '髋部下沉不足',
+        tip: '下蹲时髋部再主动坐低一点，不要只弯膝。',
+        advice: '先做原地后摆下蹲练习，体会膝和髋一起下沉，再进入原地蹬摆。'
+    },
+    arm_back_weak: {
+        label: '手臂后摆不足',
+        tip: '预摆时手臂再向后打开一些，再和蹬地一起前上摆。',
+        advice: '先做 5 次后摆打开练习，再做原地蹬摆，体会手臂带动节奏。'
+    },
+    drive_swing_async: {
+        label: '蹬摆不同步',
+        tip: '摆臂和蹬地要一起发力，不要一个先一个后。',
+        advice: '先做摆臂和蹬地口令分解练习，再做原地快速蹬摆。'
+    }
+});
 
 export function pointVisible(point, minVisibility = JUMP_CONFIG.minVisibility) {
     return point && typeof point.x === 'number' && typeof point.y === 'number' && (point.visibility == null || point.visibility >= minVisibility);

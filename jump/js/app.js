@@ -1476,7 +1476,9 @@ const app = {
                 minHipAngle: 180,
                 maxWristBack: 0,
                 maxArmLift: 0,
-                deepestFrame: null
+                deepestFrame: null,
+                maxArmLiftFrame: null,
+                extensionStartFrame: null
             };
         }
 
@@ -1485,7 +1487,10 @@ const app = {
             app.drillMetrics.minKneeAngle = Math.min(app.drillMetrics.minKneeAngle, features.kneeAngle);
             app.drillMetrics.minHipAngle = Math.min(app.drillMetrics.minHipAngle, features.hipAngle);
             app.drillMetrics.maxWristBack = Math.max(app.drillMetrics.maxWristBack, features.wristBack || 0);
-            app.drillMetrics.maxArmLift = Math.max(app.drillMetrics.maxArmLift, features.armLift || 0);
+            if ((features.armLift || 0) >= app.drillMetrics.maxArmLift) {
+                app.drillMetrics.maxArmLift = features.armLift || 0;
+                app.drillMetrics.maxArmLiftFrame = app.drillFrames;
+            }
             if (app.drillMetrics.deepestFrame == null || features.kneeAngle <= app.drillMetrics.minKneeAngle) {
                 app.drillMetrics.deepestFrame = app.drillFrames;
             }
@@ -1527,6 +1532,11 @@ const app = {
             const kneeOpenDelta = features.kneeAngle - metrics.minKneeAngle;
             const hipOpenDelta = features.hipAngle - metrics.minHipAngle;
             const extensionReady = kneeOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin && hipOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin * 0.75;
+            if (extensionReady && metrics.extensionStartFrame == null) metrics.extensionStartFrame = app.drillFrames;
+            const driveSwingAsync =
+                metrics.extensionStartFrame != null &&
+                metrics.maxArmLiftFrame != null &&
+                Math.abs(metrics.maxArmLiftFrame - metrics.extensionStartFrame) > JUMP_CONFIG.preloadDrillSyncToleranceFrames;
             const extensionComplete =
                 usableSquat &&
                 usableArmBack &&
@@ -1543,6 +1553,8 @@ const app = {
                 updateFeedback('髋部再坐低一点', '下蹲时膝和髋一起下沉，不要只弯膝不折髋。', 'PRELOAD');
             } else if (armBackWeak) {
                 updateFeedback('手臂再向后摆', '先把手臂后摆打开，再和蹬地一起向前上方摆起。', 'PRELOAD');
+            } else if (driveSwingAsync) {
+                updateFeedback('摆臂和蹬摆一起发力', '不要一个先一个后，手臂前摆和蹬地尽量同步。', 'PRELOAD');
             } else if (!extensionReady) {
                 updateFeedback('保持最低点后快速蹬摆', '下蹲到位后立即伸髋伸膝，原地向前上方蹬摆。', 'PRELOAD');
             } else {
@@ -1552,8 +1564,10 @@ const app = {
             if (extensionComplete) {
                 app.round.practiceCount += 1;
                 app.round.successCount += 1;
-                if (squatClearlyShallow || hipFoldClearlyWeak) incrementReason(app.round.improvementReasons, 'preload_weak');
-                if (armBackClearlyWeak || metrics.maxArmLift < JUMP_CONFIG.preloadDrillArmLiftMin - 0.005) incrementReason(app.round.improvementReasons, 'arm_weak');
+                if (squatClearlyShallow) incrementReason(app.round.improvementReasons, 'preload_weak');
+                if (hipFoldClearlyWeak) incrementReason(app.round.improvementReasons, 'hip_fold_weak');
+                if (armBackClearlyWeak || metrics.maxArmLift < JUMP_CONFIG.preloadDrillArmLiftMin - 0.005) incrementReason(app.round.improvementReasons, 'arm_back_weak');
+                if (driveSwingAsync) incrementReason(app.round.improvementReasons, 'drive_swing_async');
                 if (features.kneeAngle < JUMP_CONFIG.preloadDrillExtendKneeMin - 4 || features.hipAngle < JUMP_CONFIG.preloadDrillExtendHipMin - 4) incrementReason(app.round.improvementReasons, 'takeoff_weak');
                 updateCounters();
                 playTone('success');
@@ -1567,14 +1581,25 @@ const app = {
             if (app.drillFrames > JUMP_CONFIG.preloadDrillTimeoutFrames) {
                 app.round.practiceCount += 1;
                 app.round.failedCount += 1;
-                if (!usableSquat) incrementReason(app.round.failReasons, 'preload_weak');
-                else incrementReason(app.round.failReasons, 'takeoff_weak');
-                if (!usableArmBack) incrementReason(app.round.improvementReasons, 'arm_weak');
+                if (squatTooShallow) incrementReason(app.round.failReasons, 'preload_weak');
+                if (hipFoldWeak) incrementReason(app.round.failReasons, 'hip_fold_weak');
+                if (!usableSquat && !squatTooShallow && !hipFoldWeak) incrementReason(app.round.failReasons, 'preload_weak');
+                if (!usableArmBack) incrementReason(app.round.improvementReasons, 'arm_back_weak');
+                if (driveSwingAsync) incrementReason(app.round.improvementReasons, 'drive_swing_async');
+                if (usableSquat && usableArmBack && !driveSwingAsync) incrementReason(app.round.failReasons, 'takeoff_weak');
                 updateCounters();
                 playTone('warning');
                 updateFeedback(
-                    !usableSquat ? '本次下蹲不足' : '本次原地蹬摆未充分',
-                    !usableSquat ? ISSUE_META.preload_weak.tip : ISSUE_META.takeoff_weak.tip,
+                    squatTooShallow ? '本次下蹲不足' :
+                    hipFoldWeak ? '本次髋部下沉不足' :
+                    !usableArmBack ? '本次手臂后摆不足' :
+                    driveSwingAsync ? '本次蹬摆不同步' :
+                    '本次原地蹬摆未充分',
+                    squatTooShallow ? ISSUE_META.preload_weak.tip :
+                    hipFoldWeak ? ISSUE_META.hip_fold_weak.tip :
+                    !usableArmBack ? ISSUE_META.arm_back_weak.tip :
+                    driveSwingAsync ? ISSUE_META.drive_swing_async.tip :
+                    ISSUE_META.takeoff_weak.tip,
                     'READY'
                 );
                 app.drillPhase = 'IDLE';
