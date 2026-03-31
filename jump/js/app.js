@@ -55,8 +55,8 @@ const DRILL_CONTENT = {
         { title: '推荐练习', text: '原地摆臂 2 组，每组 8 次；再做 5 次摆臂带预摆，感受手臂带动身体向前上方。' }
     ],
     preload: [
-        { title: '预摆蹬伸专项', text: '重点练膝髋共同下沉和快速蹬伸，不要只弯腰或只蹲不蹬。' },
-        { title: '推荐练习', text: '先做 5 次慢预摆，再做 5 次预摆后快速蹬伸，重点体会下蹲和起跳衔接。' }
+        { title: '预摆蹬摆专项', text: '重点练手臂后摆时屈膝下蹲，再原地快速蹬摆。下蹲目标膝角约 90 到 120 度，不要只弯腰或只蹲不摆。' },
+        { title: '推荐练习', text: '先做 5 次原地后摆下蹲，再做 5 次原地快速蹬摆，重点体会下蹲深度、摆臂和蹬地同时发力。' }
     ],
     landing: [
         { title: '落地缓冲专项', text: '重点练脚跟先着地、全脚掌过渡和屈膝缓冲，落地后保持身体稳定。' },
@@ -119,6 +119,7 @@ const app = {
             confirmFrames: { takeoff: 0, flight: 0, landing: 0 },
             drillPhase: 'IDLE',
             drillFrames: 0,
+            drillMetrics: null,
             gestureStage: GESTURE_STAGE_WAIT,
             gestureHoldFrames: 0,
             transitionStartedAt: 0,
@@ -732,7 +733,7 @@ const app = {
             if (currentMode() === 'arms') {
                 updateFeedback('当前为摆臂专项', '重点体会大臂后摆到前上摆，不要只甩小臂。', 'READY');
             } else if (currentMode() === 'preload') {
-                updateFeedback('当前为预摆蹬伸专项', '重点体会膝髋共同下沉，再快速蹬伸起跳。', 'READY');
+                updateFeedback('当前为预摆蹬摆专项', '重点体会手臂后摆时屈膝下蹲，再原地快速蹬摆。', 'READY');
             } else if (currentMode() === 'landing') {
                 updateFeedback('当前为落地缓冲专项', '重点体会脚跟先着地、屈膝缓冲和稳定控制。', 'READY');
             } else {
@@ -772,6 +773,7 @@ const app = {
             app.confirmFrames = { takeoff: 0, flight: 0, landing: 0 };
             app.drillPhase = 'IDLE';
             app.drillFrames = 0;
+            app.drillMetrics = null;
         }
 
         function resetGestureGate() {
@@ -1468,6 +1470,27 @@ const app = {
             }
         }
 
+        function resetPreloadDrillMetrics() {
+            app.drillMetrics = {
+                minKneeAngle: 180,
+                minHipAngle: 180,
+                maxWristBack: 0,
+                maxArmLift: 0,
+                deepestFrame: null
+            };
+        }
+
+        function updatePreloadDrillMetrics(features) {
+            if (!app.drillMetrics) resetPreloadDrillMetrics();
+            app.drillMetrics.minKneeAngle = Math.min(app.drillMetrics.minKneeAngle, features.kneeAngle);
+            app.drillMetrics.minHipAngle = Math.min(app.drillMetrics.minHipAngle, features.hipAngle);
+            app.drillMetrics.maxWristBack = Math.max(app.drillMetrics.maxWristBack, features.wristBack || 0);
+            app.drillMetrics.maxArmLift = Math.max(app.drillMetrics.maxArmLift, features.armLift || 0);
+            if (app.drillMetrics.deepestFrame == null || features.kneeAngle <= app.drillMetrics.minKneeAngle) {
+                app.drillMetrics.deepestFrame = app.drillFrames;
+            }
+        }
+
         function handlePreloadDrill(features) {
             if (app.readyFrames < JUMP_CONFIG.readyHoldFrames) {
                 updateFeedback('先站稳准备', '预摆蹬伸专项开始前，也要先站稳并侧身入镜。', 'READY');
@@ -1478,36 +1501,78 @@ const app = {
                 return;
             }
             if (app.drillPhase === 'IDLE') {
-                if (features.kneeAngle <= JUMP_CONFIG.preloadKneeMax || features.hipAngle <= JUMP_CONFIG.preloadHipMax) {
+                if (features.kneeAngle <= JUMP_CONFIG.preloadDrillEnterKneeMax || features.hipAngle <= JUMP_CONFIG.preloadDrillEnterHipMax) {
                     app.drillPhase = 'PRELOAD';
                     app.drillFrames = 0;
-                    updateFeedback('已进入预摆', '继续下蹲，再快速蹬伸起跳。', 'PRELOAD');
+                    resetPreloadDrillMetrics();
+                    updatePreloadDrillMetrics(features);
+                    updateFeedback('已进入原地蹬摆预备', '手臂继续后摆，同时屈膝下蹲到位，再原地快速蹬摆。', 'PRELOAD');
                 } else {
-                    updateFeedback('预摆蹬伸专项', '先屈膝下蹲，再快速伸髋伸膝。', 'READY');
+                    updateFeedback('原地蹬摆专项', '先手臂后摆，再屈膝下蹲到 90 到 120 度，随后原地快速蹬摆。', 'READY');
                 }
                 return;
             }
             app.drillFrames += 1;
-            if (features.kneeAngle >= JUMP_CONFIG.takeoffKneeMin) {
+            updatePreloadDrillMetrics(features);
+            const metrics = app.drillMetrics;
+            const squatTooShallow = metrics.minKneeAngle > JUMP_CONFIG.preloadDrillTargetKneeMax;
+            const squatTooDeep = metrics.minKneeAngle < JUMP_CONFIG.preloadDrillTargetKneeMin;
+            const hipFoldWeak = metrics.minHipAngle > JUMP_CONFIG.preloadDrillTargetHipMax;
+            const armBackWeak = metrics.maxWristBack < JUMP_CONFIG.preloadDrillArmBackMin;
+            const kneeOpenDelta = features.kneeAngle - metrics.minKneeAngle;
+            const hipOpenDelta = features.hipAngle - metrics.minHipAngle;
+            const extensionReady = kneeOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin && hipOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin * 0.75;
+            const extensionComplete =
+                extensionReady &&
+                features.kneeAngle >= JUMP_CONFIG.preloadDrillExtendKneeMin &&
+                features.hipAngle >= JUMP_CONFIG.preloadDrillExtendHipMin &&
+                metrics.maxArmLift >= JUMP_CONFIG.preloadDrillArmLiftMin;
+
+            if (squatTooShallow) {
+                updateFeedback('再下蹲一点', '手臂后摆的同时继续屈膝，目标膝角控制在 90 到 120 度。', 'PRELOAD');
+            } else if (squatTooDeep) {
+                updateFeedback('不要蹲得过深', '下蹲到位后立刻原地快速蹬摆，保持节奏连贯。', 'PRELOAD');
+            } else if (hipFoldWeak) {
+                updateFeedback('髋部再坐低一点', '下蹲时膝和髋一起下沉，不要只弯膝不折髋。', 'PRELOAD');
+            } else if (armBackWeak) {
+                updateFeedback('手臂再向后摆', '先把手臂后摆打开，再和蹬地一起向前上方摆起。', 'PRELOAD');
+            } else if (!extensionReady) {
+                updateFeedback('保持最低点后快速蹬摆', '下蹲到位后立即伸髋伸膝，原地向前上方蹬摆。', 'PRELOAD');
+            } else {
+                updateFeedback('继续原地快速蹬摆', '摆臂和蹬地一起发力，快速把身体向前上方送起。', 'PRELOAD');
+            }
+
+            if (extensionComplete) {
                 app.round.practiceCount += 1;
                 app.round.successCount += 1;
+                if (squatTooShallow || hipFoldWeak) incrementReason(app.round.improvementReasons, 'preload_weak');
+                if (armBackWeak || metrics.maxArmLift < JUMP_CONFIG.preloadDrillArmLiftMin + 0.02) incrementReason(app.round.improvementReasons, 'arm_weak');
+                if (features.kneeAngle < JUMP_CONFIG.preloadDrillExtendKneeMin || features.hipAngle < JUMP_CONFIG.preloadDrillExtendHipMin) incrementReason(app.round.improvementReasons, 'takeoff_weak');
                 updateCounters();
                 playTone('success');
-                updateFeedback('预摆蹬伸完成', '膝髋打开较及时，继续保持。', 'READY');
-                speakPraiseLine('这次蹬伸很连贯，继续保持。');
+                updateFeedback('原地蹬摆完成', '下蹲和蹬摆节奏较完整，继续保持。', 'READY');
+                speakPraiseLine('这次原地蹬摆比较连贯，继续保持。');
                 app.drillPhase = 'IDLE';
                 app.cooldownFrames = 12;
+                app.drillMetrics = null;
                 return;
             }
-            if (app.drillFrames > 18) {
+            if (app.drillFrames > JUMP_CONFIG.preloadDrillTimeoutFrames) {
                 app.round.practiceCount += 1;
                 app.round.failedCount += 1;
-                incrementReason(app.round.failReasons, 'takeoff_weak');
+                if (squatTooShallow || hipFoldWeak) incrementReason(app.round.failReasons, 'preload_weak');
+                else incrementReason(app.round.failReasons, 'takeoff_weak');
+                if (armBackWeak) incrementReason(app.round.improvementReasons, 'arm_weak');
                 updateCounters();
                 playTone('warning');
-                updateFeedback('本次蹬伸未充分', ISSUE_META.takeoff_weak.tip, 'READY');
+                updateFeedback(
+                    squatTooShallow || hipFoldWeak ? '本次下蹲不足' : '本次原地蹬摆未充分',
+                    squatTooShallow || hipFoldWeak ? ISSUE_META.preload_weak.tip : ISSUE_META.takeoff_weak.tip,
+                    'READY'
+                );
                 app.drillPhase = 'IDLE';
                 app.cooldownFrames = 12;
+                app.drillMetrics = null;
             }
         }
 

@@ -21,6 +21,17 @@ export const JUMP_CONFIG = {
     preloadKneeMax: 164,
     preloadHipMax: 160,
     preloadMinFrames: 3,
+    preloadDrillEnterKneeMax: 138,
+    preloadDrillEnterHipMax: 132,
+    preloadDrillTargetKneeMin: 90,
+    preloadDrillTargetKneeMax: 120,
+    preloadDrillTargetHipMax: 105,
+    preloadDrillArmBackMin: 0.22,
+    preloadDrillArmLiftMin: 0.08,
+    preloadDrillExtendKneeMin: 155,
+    preloadDrillExtendHipMin: 145,
+    preloadDrillExtendDeltaMin: 26,
+    preloadDrillTimeoutFrames: 24,
     takeoffConfirmFrames: 2,
     flightConfirmFrames: 2,
     landingConfirmFrames: 2,
@@ -66,11 +77,11 @@ export const JUMP_CONFIG = {
 
 export const ISSUE_META = {
     not_ready: { label: '起跳前没站稳', tip: '先侧身站稳，再进入预摆。', advice: '开始前先稳定站姿 1 秒，再做完整预摆和起跳。' },
-    preload_weak: { label: '预摆不足', tip: '预摆再深一点，膝和髋要一起下沉。', advice: '下一轮先做 3 次慢预摆，再做完整动作。' },
+    preload_weak: { label: '下蹲不足', tip: '再下蹲一点，膝和髋要一起下沉到位。', advice: '下一轮先做原地后摆下蹲练习，膝角控制到 90 到 120 度，再快速蹬摆。' },
     takeoff_weak: { label: '蹬伸不充分', tip: '起跳时膝髋要更快伸展。', advice: '蹬地时注意伸髋伸膝，向前上方发力。' },
     pushoff_weak: { label: '蹬地力量不足', tip: '蹬地时继续快速伸髋伸膝，把身体送出去。', advice: '先做 5 次快速蹬伸练习，再做完整跳远，体会脚掌快速发力。' },
     takeoff_angle_low: { label: '起跳角度偏低', tip: '起跳时注意向前上方送髋，不要只向前冲。', advice: '练习预摆后向前上方蹬伸，体会向上和向前同时发力。' },
-    takeoff_angle_high: { label: '起跳角度偏高', tip: '起跳时不要只向上窜，注意向前送髋。', advice: '下一轮注意前送身体，减少只向上起跳的感觉。' },
+    takeoff_angle_high: { label: '起跳角度偏高', tip: '起跳时不要只向上蹿，注意向前送髋。', advice: '下一轮注意前送身体，减少只向上起跳的感觉。' },
     arm_weak: { label: '摆臂不积极', tip: '双臂从后向前上方快速摆起。', advice: '练习大臂后摆到前上摆，带动起跳节奏。' },
     arm_leg_async: { label: '摆臂与蹬地不同步', tip: '摆臂和蹬地要同时快速发力。', advice: '先做摆臂加蹬伸分解练习，用口令把手臂和腿部发力对齐。' },
     flight_short: { label: '腾空前送不足', tip: '蹬地后继续向前送髋。', advice: '下次蹬地更完整，让身体前移更明显。' },
@@ -339,7 +350,7 @@ export function topReasonEntries(bucket) {
 export function buildTopReasonText(bucket, issueMeta = ISSUE_META) {
     const entries = topReasonEntries(bucket);
     if (entries.length === 0) return '';
-    return entries.map(([code, count]) => `${issueMeta[code].label}${count}次`).join('，');
+    return entries.map(([code, count]) => `${issueMeta[code].label}${count}次`).join('；');
 }
 
 export function pickSuggestion(round, mode, issueMeta = ISSUE_META) {
@@ -392,3 +403,4 @@ export function buildRoundAnalysis(round, mode, issueMeta = ISSUE_META) {
         actionImproveReasons
     };
 }
+
