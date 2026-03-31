@@ -191,7 +191,7 @@ const app = {
                 if (legacyChip) legacyChip.remove();
             }
             const historyHint = document.querySelector('.panel .muted');
-            if (historyHint) historyHint.textContent = '每次结束本轮后，会保存当前学生的练习次数、主要问题和下一轮建议。';
+            if (historyHint) historyHint.textContent = '每次点击结束后，会保存当前学生的练习次数、主要问题和下一轮建议。';
         }
 
         function createDefaultSessionMeta() {
@@ -1120,6 +1120,12 @@ const app = {
             practiceCountEl.textContent = app.round ? app.round.practiceCount : 0;
         }
 
+        function updateTrainingButton() {
+            if (!startBtn) return;
+            startBtn.textContent = app.training ? '结束' : '开始';
+            startBtn.className = `stage-action-toggle${app.training ? ' is-active' : ''}`;
+        }
+
         function refreshBaseline(features) {
             if (!app.baseline) {
                 app.baseline = {
@@ -1812,8 +1818,7 @@ const app = {
             if (!app.ready) return;
             unlockAudio();
             app.training = !app.training;
-            startBtn.textContent = app.training ? '暂停分析' : '开始分析';
-            startBtn.className = app.training ? 'danger' : 'primary';
+            updateTrainingButton();
             if (app.training) {
                 resetRound(false);
                 playTone('start');
@@ -1834,8 +1839,7 @@ const app = {
             const practiceCount = Number(app.round.practiceCount || 0);
             if (app.training) {
                 app.training = false;
-                startBtn.textContent = '开始分析';
-                startBtn.className = 'primary';
+                updateTrainingButton();
             }
             renderRoundSummary();
             saveRoundHistory();
@@ -1844,7 +1848,7 @@ const app = {
                 const suggestion = pickSuggestion();
                 speakText(`本轮练习${practiceCount}次。${suggestion}`, { kind: 'guidance', force: true });
             }
-            if (showIdleMessage) updateFeedback('本轮已结束', '可切换学生或点击开始分析，进入下一轮。', 'IDLE');
+            if (showIdleMessage) updateFeedback('本轮已结束', '可切换学生或点击开始，进入下一轮。', 'IDLE');
         }
 
         async function registerServiceWorker() {
@@ -1878,7 +1882,7 @@ const app = {
                 resizeCanvas();
                 app.ready = true;
                 overlay.style.display = 'none';
-                updateFeedback('请侧身站立，保证全身入镜', '开始分析后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
+                updateFeedback('请侧身站立，保证全身入镜', '点击开始后，系统会自动识别预摆、起跳、腾空和落地阶段。', 'IDLE');
             } catch (error) {
                 console.error(error);
                 overlay.style.display = 'flex';
@@ -1907,6 +1911,7 @@ const app = {
             refreshSyncStatus();
             renderDrills();
             resetRound(false);
+            updateTrainingButton();
             await initCamera();
             setTimeout(() => flushSyncQueue(), 1200);
         }

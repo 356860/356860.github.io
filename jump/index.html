@@ -148,6 +148,30 @@
             box-shadow: none;
         }
 
+        .stage-action-toggle {
+            border: 1px solid rgba(216, 226, 240, 0.95);
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            border-radius: 999px;
+            padding: 10px 18px;
+            min-width: 94px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            backdrop-filter: blur(8px);
+            box-shadow: none;
+            transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .stage-action-toggle:hover {
+            transform: translateY(-1px);
+        }
+
+        .stage-action-toggle.is-active {
+            background: rgba(232, 93, 93, 0.18);
+            border-color: rgba(255, 224, 224, 0.84);
+        }
+
         .student-panel {
             position: absolute;
             top: calc(100% + 10px);
@@ -455,6 +479,29 @@
             gap: 10px;
         }
 
+        .control-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .control-action-btn {
+            border: 1px solid rgba(216, 226, 240, 0.9);
+            background: rgba(36, 107, 255, 0.08);
+            color: var(--primary);
+            border-radius: 999px;
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+        }
+
+        .control-action-btn:hover {
+            background: rgba(36, 107, 255, 0.12);
+            transform: translateY(-1px);
+        }
+
         .meta-grid {
             display: grid;
             grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -641,11 +688,7 @@
             </div>
 
             <div class="bottom-bar">
-                <div class="toolbar">
-                    <button id="start-btn" class="primary" onclick="toggleTraining()">开始分析</button>
-                    <button onclick="finishRound()">结束本轮</button>
-                    <button onclick="clearCurrentStudentHistory()">清空记录</button>
-                </div>
+                <button id="start-btn" class="stage-action-toggle" onclick="toggleTraining()">开始</button>
             </div>
 
             <div class="overlay" id="overlay">
@@ -671,7 +714,7 @@
             </section>
 
             <section class="panel">
-                <h3>课堂信息</h3>
+                <h3>总控台</h3>
                 <div class="meta-panel">
                     <div class="meta-grid">
                         <div class="meta-field">
@@ -686,6 +729,9 @@
                             <label for="session-label-input">课次</label>
                             <input id="session-label-input" type="text" maxlength="40" placeholder="例如：2026-03-24 上午课" onchange="updateSessionMeta()" onblur="updateSessionMeta()">
                         </div>
+                    </div>
+                    <div class="control-actions">
+                        <button class="control-action-btn" type="button" onclick="clearCurrentStudentHistory()">清空当前学生记录</button>
                     </div>
                     <p class="muted meta-hint">这些信息会写入每次训练总结，后面做大屏和分组统计时直接可用。</p>
                 </div>
@@ -711,14 +757,14 @@
                 <div class="summary" id="round-summary">
                     <div class="summary-card">
                         <strong>动作结果</strong>
-                        <p>开始分析后，系统会按照“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作，并给出针对性指导。</p>
+                        <p>点击开始后，系统会按照“站稳准备 → 预摆 → 蹬伸起跳 → 腾空 → 落地缓冲”五个阶段判断动作，并给出针对性指导。</p>
                     </div>
                 </div>
             </section>
 
             <section class="panel" style="min-height: 0; display: flex; flex-direction: column;">
                 <h3>学生历史</h3>
-                <p class="muted">每次结束本轮后，会保存当前学生的练习次数、主要问题和下一轮建议。</p>
+                <p class="muted">每次点击结束后，会保存当前学生的练习次数、主要问题和下一轮建议。</p>
                 <p class="muted sync-status" id="sync-status">云端同步：准备中。</p>
                 <div class="history" id="history-list"></div>
             </section>
