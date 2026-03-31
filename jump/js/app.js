@@ -1508,7 +1508,7 @@ const app = {
                     updatePreloadDrillMetrics(features);
                     updateFeedback('已进入原地蹬摆预备', '手臂继续后摆，同时屈膝下蹲到位，再原地快速蹬摆。', 'PRELOAD');
                 } else {
-                    updateFeedback('原地蹬摆专项', '先手臂后摆，再屈膝下蹲到 90 到 120 度，随后原地快速蹬摆。', 'READY');
+                    updateFeedback('原地蹬摆专项', '先手臂后摆，再屈膝下蹲到大约 90 到 120 度，随后原地快速蹬摆。', 'READY');
                 }
                 return;
             }
@@ -1519,6 +1519,9 @@ const app = {
             const squatTooDeep = metrics.minKneeAngle < JUMP_CONFIG.preloadDrillTargetKneeMin;
             const hipFoldWeak = metrics.minHipAngle > JUMP_CONFIG.preloadDrillTargetHipMax;
             const armBackWeak = metrics.maxWristBack < JUMP_CONFIG.preloadDrillArmBackMin;
+            const squatClearlyShallow = metrics.minKneeAngle > JUMP_CONFIG.preloadDrillTargetKneeMax + 8;
+            const hipFoldClearlyWeak = metrics.minHipAngle > JUMP_CONFIG.preloadDrillTargetHipMax + 8;
+            const armBackClearlyWeak = metrics.maxWristBack < JUMP_CONFIG.preloadDrillArmBackMin * 0.82;
             const kneeOpenDelta = features.kneeAngle - metrics.minKneeAngle;
             const hipOpenDelta = features.hipAngle - metrics.minHipAngle;
             const extensionReady = kneeOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin && hipOpenDelta >= JUMP_CONFIG.preloadDrillExtendDeltaMin * 0.75;
@@ -1529,7 +1532,7 @@ const app = {
                 metrics.maxArmLift >= JUMP_CONFIG.preloadDrillArmLiftMin;
 
             if (squatTooShallow) {
-                updateFeedback('再下蹲一点', '手臂后摆的同时继续屈膝，目标膝角控制在 90 到 120 度。', 'PRELOAD');
+                updateFeedback('再下蹲一点', '手臂后摆的同时继续屈膝，膝角大概做到 90 到 120 度就可以。', 'PRELOAD');
             } else if (squatTooDeep) {
                 updateFeedback('不要蹲得过深', '下蹲到位后立刻原地快速蹬摆，保持节奏连贯。', 'PRELOAD');
             } else if (hipFoldWeak) {
@@ -1545,9 +1548,9 @@ const app = {
             if (extensionComplete) {
                 app.round.practiceCount += 1;
                 app.round.successCount += 1;
-                if (squatTooShallow || hipFoldWeak) incrementReason(app.round.improvementReasons, 'preload_weak');
-                if (armBackWeak || metrics.maxArmLift < JUMP_CONFIG.preloadDrillArmLiftMin + 0.02) incrementReason(app.round.improvementReasons, 'arm_weak');
-                if (features.kneeAngle < JUMP_CONFIG.preloadDrillExtendKneeMin || features.hipAngle < JUMP_CONFIG.preloadDrillExtendHipMin) incrementReason(app.round.improvementReasons, 'takeoff_weak');
+                if (squatClearlyShallow || hipFoldClearlyWeak) incrementReason(app.round.improvementReasons, 'preload_weak');
+                if (armBackClearlyWeak || metrics.maxArmLift < JUMP_CONFIG.preloadDrillArmLiftMin - 0.005) incrementReason(app.round.improvementReasons, 'arm_weak');
+                if (features.kneeAngle < JUMP_CONFIG.preloadDrillExtendKneeMin - 4 || features.hipAngle < JUMP_CONFIG.preloadDrillExtendHipMin - 4) incrementReason(app.round.improvementReasons, 'takeoff_weak');
                 updateCounters();
                 playTone('success');
                 updateFeedback('原地蹬摆完成', '下蹲和蹬摆节奏较完整，继续保持。', 'READY');
