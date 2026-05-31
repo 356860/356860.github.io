@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>AI 运动教练 - 提膝跳训练</title>
+    <!-- 引入炫酷的数码/科技感字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #10b981; /* 荧光绿 */
+            --primary-glow: rgba(16, 185, 129, 0.4);
+            --bg-dark: #0f172a; /* 暗夜蓝 */
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+        }
+
+        * { 
+            box-sizing: border-box; 
+            margin: 0; 
+            padding: 0; 
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+            min-height: 100vh; 
+            overflow: hidden;
+            color: #f8fafc;
+        }
+
+        #game-container { 
+            position: relative; 
+            width: 100vw; 
+            height: 100vh; 
+        }
+
+        canvas {
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%;
+            transform: scaleX(-1); /* 镜像翻转画面 */
+            z-index: 1;
+        }
+
+        #ui-overlay { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            z-index: 10; 
+            pointer-events: none; 
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 30px;
+        }
+
+        /* 顶部精致 HUD 面板 */
+        .hud-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+        }
+
+        .hud-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 15px 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4), 
+                        inset 0 1px 1px rgba(255, 255, 255, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 160px;
+        }
+
+        .brand-title {
+            font-size: 1.1rem;
+            font-weight: 800;
+            letter-spacing: 2px;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+
+        .score-display {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 4.5rem;
+            font-weight: 900;
+            line-height: 1;
+            color: var(--primary);
+            text-shadow: 0 0 20px var(--primary-glow);
+            margin-top: 5px;
+        }
+
+        /* 状态指示器 */
+        .status-badge {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 6px 16px;
+            border-radius: 100px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #38bdf8;
+            margin-top: 10px;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.jumping {
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, 0.3);
+            text-shadow: 0 0 8px rgba(251, 191, 36, 0.4);
+        }
+
+        /* 控制中心区域 */
+        #controls-wrapper {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 50;
+            pointer-events: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* 炫酷主控制按钮 */
+        #start-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.8);
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            font-size: 2.2rem;
+            cursor: pointer;
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4),
+                        0 0 0 0px rgba(16, 185, 129, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            outline: none;
+        }
+
+        #start-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(16, 185, 129, 0.6);
+        }
+
+        #start-btn:active {
+            transform: scale(0.95);
+        }
+
+        #start-btn.running {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+            border-color: rgba(255, 255, 255, 0.8);
+        }
+
+        #start-btn.running:hover {
+            box-shadow: 0 10px 30px rgba(239, 68, 68, 0.6);
+        }
+
+        /* 浮动击中反馈 */
+        .feedback-toast {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #0f172a;
+            padding: 12px 35px;
+            border-radius: 50px;
+            font-size: 2.2rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+            border: 3px solid #fff;
+            box-shadow: 0 15px 40px rgba(245, 158, 11, 0.5);
+            display: none;
+            z-index: 20;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        @keyframes popOut {
+            0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.0); opacity: 1; }
+        }
+
+        /* 各遮罩层 */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: all 0.5s ease;
+        }
+
+        #status-overlay {
+            background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+        }
+
+        #error-overlay, #result-modal {
+            display: none;
+            background: rgba(15, 23, 42, 0.85);
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 1s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
+            margin-bottom: 25px;
+            box-shadow: 0 0 15px var(--primary-glow);
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .status-text {
+            font-size: 1.25rem;
+            color: #e2e8f0;
+            font-weight: 700;
+            letter-spacing: 1px;
+        }
+
+        /* 模态框卡片 */
+        .modal-card {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            border-radius: 32px;
+            padding: 45px 60px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            max-width: 90%;
+            width: 450px;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+
+        .modal-title {
+            font-size: 2.2rem;
+            font-weight: 900;
+            color: #f8fafc;
+            margin-bottom: 25px;
+            letter-spacing: 2px;
+        }
+
+        .result-score-container {
+            margin: 30px 0;
+        }
+
+        .result-label {
+            font-size: 1rem;
+            color: #94a3b8;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .result-score {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 6.5rem;
+            font-weight: 900;
+            color: var(--primary);
+            text-shadow: 0 0 30px var(--primary-glow);
+            line-height: 1.1;
+        }
+
+        .badge-winner {
+            display: inline-block;
+            background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+            color: #0f172a;
+            padding: 8px 24px;
+            border-radius: 100px;
+            font-weight: 800;
+            font-size: 0.95rem;
+            margin-top: 15px;
+            box-shadow: 0 10px 20px rgba(245, 158, 11, 0.3);
+            letter-spacing: 1px;
+        }
+
+        .btn-action {
+            margin-top: 30px;
+            width: 100%;
+            padding: 16px;
+            border-radius: 100px;
+            border: none;
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            font-size: 1.15rem;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+            transition: all 0.2s ease;
+            letter-spacing: 1px;
+        }
+
+        .btn-action:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 25px rgba(37, 99, 235, 0.5);
+        }
+
+        .btn-action:active {
+            transform: translateY(0);
+        }
+
+        video { 
+            display: none; 
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- 视频源与绘图层 -->
+        <video id="video" playsinline></video>
+        <canvas id="canvas"></canvas>
+
+        <!-- UI 上盖界面 -->
+        <div id="ui-overlay">
+            <div class="hud-header">
+                <!-- 单人 HUD 面板 -->
+                <div class="hud-panel">
+                    <span class="brand-title">📊 提膝跳训练</span>
+                    <span class="score-display" id="score-val">0</span>
+                    <span class="status-badge" id="status-badge">STANDBY</span>
+                </div>
+            </div>
+
+            <!-- 浮动 Perfect! 提示 -->
+            <div id="feedback-toast" class="feedback-toast">漂亮!</div>
+        </div>
+
+        <!-- 主控制面板 -->
+        <div id="controls-wrapper">
+            <button id="start-btn">▶</button>
+        </div>
+
+        <!-- AI 初始化等待层 -->
+        <div id="status-overlay" class="overlay">
+            <div class="spinner"></div>
+            <div class="status-text" id="status-text">AI 运动教练初始化中...</div>
+        </div>
+
+        <!-- 错误提示层 -->
+        <div id="error-overlay" class="overlay">
+            <div class="modal-card">
+                <h3 style="color:#ef4444;font-size:1.8rem;margin-bottom:15px;font-weight:900;">❌ 启动失败</h3>
+                <p id="error-text" style="color:#94a3b8;margin-bottom:30px;line-height:1.6;"></p>
+                <button class="btn-action" onclick="location.reload()">重新启动</button>
+            </div>
+        </div>
+
+        <!-- 结算弹窗 -->
+        <div id="result-modal" class="overlay">
+            <div class="modal-card">
+                <div class="modal-title">🏁 训练完成</div>
+                <div class="result-score-container">
+                    <div class="result-label">最终得分</div>
+                    <div class="result-score" id="result-score">0</div>
+                    <div id="badge-winner" class="badge-winner">🏆 运动健将</div>
+                </div>
+                <button class="btn-action" onclick="restartGame()">再练一组</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 开发版直接引入开发脚本，打包时会被打包脚本自动处理 -->
+    <script src="game.js"></script>
+</body>
+</html>
